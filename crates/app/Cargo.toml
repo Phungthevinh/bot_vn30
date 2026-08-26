@@ -1,0 +1,32 @@
+[package]
+name = "vn30-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vn30-analyzer"
+path = "src/main.rs"
+
+[dependencies]
+vn30-domain.workspace = true
+vn30-market-data.workspace = true
+vn30-state-store.workspace = true
+vn30-indicators.workspace = true
+vn30-features.workspace = true
+vn30-ml.workspace = true
+vn30-risk.workspace = true
+vn30-signals.workspace = true
+vn30-alerts.workspace = true
+vn30-telegram.workspace = true
+vn30-storage.workspace = true
+vn30-scheduler.workspace = true
+vn30-observability.workspace = true
+
+tokio.workspace = true
+toml.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

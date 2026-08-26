@@ -1,0 +1,18 @@
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Model weights and binaries
+models/*.bin
+!models/.gitkeep
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local databases and logs
+*.db
+*.sqlite
+*.parquet
+logs/

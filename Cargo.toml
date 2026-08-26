@@ -1,0 +1,68 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/market-data",
+    "crates/state-store",
+    "crates/indicators",
+    "crates/features",
+    "crates/ml",
+    "crates/risk",
+    "crates/signals",
+    "crates/alerts",
+    "crates/telegram",
+    "crates/storage",
+    "crates/scheduler",
+    "crates/observability",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["VN30 Real-Time Analyzer Team"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Async Runtime
+tokio = { version = "1.43", features = ["full"] }
+tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+async-trait = "0.1"
+
+# Serialization & Configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# Data & Concurrency
+dashmap = "6.1"
+polars = { version = "0.46", features = ["lazy", "temporal", "parquet"] }
+
+# Machine Learning
+smartcore = "0.5.3"
+
+# Telegram Bot
+teloxide = { version = "0.13", features = ["macros"] }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Local Crates
+vn30-domain = { path = "crates/domain" }
+vn30-market-data = { path = "crates/market-data" }
+vn30-state-store = { path = "crates/state-store" }
+vn30-indicators = { path = "crates/indicators" }
+vn30-features = { path = "crates/features" }
+vn30-ml = { path = "crates/ml" }
+vn30-risk = { path = "crates/risk" }
+vn30-signals = { path = "crates/signals" }
+vn30-alerts = { path = "crates/alerts" }
+vn30-telegram = { path = "crates/telegram" }
+vn30-storage = { path = "crates/storage" }
+vn30-scheduler = { path = "crates/scheduler" }
+vn30-observability = { path = "crates/observability" }

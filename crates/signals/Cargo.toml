@@ -1,0 +1,13 @@
+[package]
+name = "vn30-signals"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+vn30-domain.workspace = true
+dashmap.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+thiserror.workspace = true

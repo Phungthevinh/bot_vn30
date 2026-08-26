@@ -1,0 +1,14 @@
+[package]
+name = "vn30-telegram"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+vn30-domain.workspace = true
+teloxide.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "vn30-features"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+vn30-domain.workspace = true
+vn30-indicators.workspace = true
+polars.workspace = true
+thiserror.workspace = true

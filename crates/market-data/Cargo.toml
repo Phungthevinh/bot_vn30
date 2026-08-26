@@ -1,0 +1,17 @@
+[package]
+name = "vn30-market-data"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+vn30-domain.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true

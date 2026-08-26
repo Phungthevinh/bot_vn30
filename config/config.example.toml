@@ -1,0 +1,58 @@
+[server]
+environment = "development" # "development" | "production"
+log_level = "info"
+
+[market_data]
+provider = "SSI_FASTCONNECT" # "SSI_FASTCONNECT" | "VNDIRECT" | "VPS" | "SIMULATOR"
+ws_endpoint = "wss://api.provider.vn/stream"
+reconnect_initial_backoff_ms = 1000
+reconnect_max_backoff_ms = 30000
+heartbeat_interval_secs = 15
+max_tick_staleness_secs = 60
+
+[basket]
+sync_time = "08:00:00"
+symbols = [
+    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
+    "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
+    "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE"
+]
+
+[state_store]
+rolling_window_size = 500 # Số lượng bar lưu trong RAM cho mỗi timeframe
+
+[features]
+beta_lookback_bars = 90
+min_valid_samples = 30
+
+[model]
+artifact_path = "models/rf_active.bin"
+retrain_schedule = "sunday"
+min_confidence_score = 0.75
+
+[risk.safe]
+target_min = 0.12
+target_max = 0.15
+sl_min = -0.04
+sl_max = -0.03
+beta_max = 1.0
+
+[risk.medium]
+target_min = 0.15
+target_max = 0.18
+sl_min = -0.06
+sl_max = -0.05
+beta_min = 1.0
+beta_max = 1.25
+
+[risk.risky]
+target_min = 0.20
+target_max = 0.25
+sl_min = -0.08
+sl_max = -0.07
+beta_min = 1.25
+
+[telegram]
+bot_token_env = "TELEGRAM_BOT_TOKEN"
+chat_allowlist = []
+debounce_cooldown_mins = 60
