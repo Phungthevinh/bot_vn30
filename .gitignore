@@ -16,3 +16,6 @@ models/*.bin
 *.sqlite
 *.parquet
 logs/
+
+# Agent/Mentor master rules
+VN30_ANTIGRAVITY_MASTER_RULES.md
