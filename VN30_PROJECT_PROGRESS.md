@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M1 — Configuration & Logging
 - Current Module: `crates/domain`
-- Current Task: M1-T02 — Environment handling & Secret Loading
-- Overall Progress: 7%
-- Last Updated: 2026-08-26 11:40
+- Current Task: M1-T04 — Error model
+- Overall Progress: 10%
+- Last Updated: 2026-08-26 16:58
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -34,7 +34,7 @@
 | ID | Milestone | Status | Progress | Review | Notes |
 |---|---|---|---:|---|---|
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
-| M1 | Configuration & Logging | IN PROGRESS | 20% | PASS | M1-T01 PASS, chuẩn bị M1-T02 |
+| M1 | Configuration & Logging | IN PROGRESS | 60% | PASS | M1-T01, M1-T02, M1-T03 PASS; chuẩn bị M1-T04 |
 | M2 | Market Data Connection | NOT STARTED | 0% | — | |
 | M3 | Data Normalization | NOT STARTED | 0% | — | |
 | M4 | State Management | NOT STARTED | 0% | — | |
@@ -67,9 +67,9 @@
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
 | M1-T01 | Configuration loader | DONE | HIGH | PASS | 3 tests PASS | `AppConfig::from_str` & `AppConfig::from_file` |
-| M1-T02 | Environment handling | IN PROGRESS | HIGH | — | — | Env overrides & secret handling |
-| M1-T03 | Structured logging | NOT STARTED | HIGH | — | — | Tracing JSON / subscriber |
-| M1-T04 | Error model | NOT STARTED | HIGH | — | — | thiserror domain errors |
+| M1-T02 | Environment handling | DONE | HIGH | PASS | 3 tests PASS | `TelegramConfig::load_bot_token` & env secret handling |
+| M1-T03 | Structured logging | DONE | HIGH | PASS | 1 test PASS | `init_logging` with fallback EnvFilter & try_init |
+| M1-T04 | Error model | IN PROGRESS | HIGH | — | — | thiserror domain errors taxonomy |
 | M1-T05 | Runtime configuration validation | NOT STARTED | HIGH | — | — | Validate thresholds, symbols |
 
 ### M2 — MARKET DATA CONNECTION
@@ -238,15 +238,14 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M1-T02 — Environment handling & Secret Loading
-- Objective: Cung cấp cơ chế đọc biến môi trường cho các thông tin nhạy cảm (Telegram Bot Token, API Credentials) và hỗ trợ override cấu hình từ ENV.
+- Task: M1-T04 — Error model
+- Objective: Hoàn thiện mô hình Error domain toàn diện trong `crates/domain/src/errors.rs` bằng `thiserror` (MarketDataError, IndicatorError, RiskError, SignalError, ModelError, AlertError).
 - Expected Output:
-  1. Module/hàm hỗ trợ kiểm tra và nạp secret từ biến môi trường (ví dụ `TELEGRAM_BOT_TOKEN`).
-  2. Bọc lỗi `ConfigError::MissingEnvVar` nếu thiếu biến môi trường bắt buộc khi chạy môi trường tương ứng.
-  3. Unit tests kiểm chứng trường hợp biến môi trường tồn tại và không tồn tại.
+  1. Phân loại đầy đủ các biến thể lỗi theo domain trong `DomainError`.
+  2. Implement `From` conversion phù hợp giữa các loại lỗi chi tiết sang `DomainError`.
+  3. Unit tests kiểm tra `Display` format và `From` trait conversions.
 - Acceptance Criteria:
-  - [ ] Secret không được hardcode trong code hay file toml mẫu.
-  - [ ] Xử lý trả về `ConfigError::MissingEnvVar` rõ ràng khi biến môi trường không được set.
+  - [ ] Hệ thống Error có cấu trúc phân lớp rõ ràng, không nuốt error context (`#[source]`).
   - [ ] Unit tests pass 100%.
 - Blockers: Không có
 
@@ -272,6 +271,8 @@
 |---|---|---|---|---|---|
 | 2026-08-24 | M0: Project Foundation (Workspace & Dependencies) | PASS | PASS | cargo check PASS | Initial setup |
 | 2026-08-26 | M1-T01: Configuration Loader & Domain Error Model | PASS | PASS | 3 unit tests PASS | `AppConfig::from_str`, `from_file`, `ConfigError` |
+| 2026-08-26 | M1-T02: Environment handling & Secret Loading | PASS | PASS | 3 unit tests PASS | `TelegramConfig::load_bot_token` with env resolution & validation |
+| 2026-08-26 | M1-T03: Structured logging | PASS | PASS | 1 unit test PASS | `init_logging` with fallback EnvFilter & try_init |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.

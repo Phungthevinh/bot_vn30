@@ -96,6 +96,19 @@ impl AppConfig {
     }
 }
 
+impl TelegramConfig {
+    pub fn load_bot_token(&self) -> Result<String, ConfigError> {
+        let bot_token_env = std::env::var(&self.bot_token_env)
+            .map_err(|_| ConfigError::MissingEnvVar(self.bot_token_env.clone().to_string()))?;
+        if bot_token_env.trim().is_empty() {
+            return Err(ConfigError::MissingEnvVar(
+                self.bot_token_env.clone().to_string(),
+            ));
+        }
+        Ok(bot_token_env)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +140,45 @@ mod tests {
         version = "1.80"
     "#;
         let result = AppConfig::from_str(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_loading_bot_token_valid() {
+        let env_key = "TEST_TELEGRAM_BOT_TOKEN_VALID";
+        std::env::set_var(env_key, "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11");
+
+        let bot_token = TelegramConfig {
+            bot_token_env: String::from(env_key),
+            chat_allowlist: vec![],
+            debounce_cooldown_mins: 0,
+        };
+        let result = bot_token.load_bot_token();
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_loading_bot_token_invalid() {
+        let bot_token = TelegramConfig {
+            bot_token_env: String::from("TELEGRAM_BOT_TOKEN"),
+            chat_allowlist: vec![],
+            debounce_cooldown_mins: 0,
+        };
+        let result = bot_token.load_bot_token();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_loading_bot_token_empty() {
+        let env_key = "TEST_TELEGRAM_BOT_TOKEN_EMPTY";
+        std::env::set_var(env_key, "");
+
+        let bot_token = TelegramConfig {
+            bot_token_env: String::from(env_key),
+            chat_allowlist: vec![],
+            debounce_cooldown_mins: 0,
+        };
+        let result = bot_token.load_bot_token();
         assert!(result.is_err());
     }
 }
