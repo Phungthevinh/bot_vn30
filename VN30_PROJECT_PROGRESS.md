@@ -5,11 +5,11 @@
 ## 1. PROJECT STATUS
 - Project: VN30 Real-Time Analyzer
 - Language: 100% Rust
-- Current Milestone: M1 — Configuration & Logging
-- Current Module: `crates/domain`
-- Current Task: M1-T04 — Error model
-- Overall Progress: 10%
-- Last Updated: 2026-08-26 16:58
+- Current Milestone: M2 — Market Data Connection
+- Current Module: `crates/market-data`
+- Current Task: M2-T02 — Authentication
+- Overall Progress: 15%
+- Last Updated: 2026-08-27 23:05
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -34,8 +34,8 @@
 | ID | Milestone | Status | Progress | Review | Notes |
 |---|---|---|---:|---|---|
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
-| M1 | Configuration & Logging | IN PROGRESS | 60% | PASS | M1-T01, M1-T02, M1-T03 PASS; chuẩn bị M1-T04 |
-| M2 | Market Data Connection | NOT STARTED | 0% | — | |
+| M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
+| M2 | Market Data Connection | IN PROGRESS | 13% | IN PROGRESS | M2-T01 PASS (3 tests), chuẩn bị M2-T02 |
 | M3 | Data Normalization | NOT STARTED | 0% | — | |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
@@ -69,13 +69,13 @@
 | M1-T01 | Configuration loader | DONE | HIGH | PASS | 3 tests PASS | `AppConfig::from_str` & `AppConfig::from_file` |
 | M1-T02 | Environment handling | DONE | HIGH | PASS | 3 tests PASS | `TelegramConfig::load_bot_token` & env secret handling |
 | M1-T03 | Structured logging | DONE | HIGH | PASS | 1 test PASS | `init_logging` with fallback EnvFilter & try_init |
-| M1-T04 | Error model | IN PROGRESS | HIGH | — | — | thiserror domain errors taxonomy |
-| M1-T05 | Runtime configuration validation | NOT STARTED | HIGH | — | — | Validate thresholds, symbols |
+| M1-T04 | Error model | DONE | HIGH | PASS | 2 tests PASS | `thiserror` domain taxonomy + conversion tests |
+| M1-T05 | Runtime configuration validation | DONE | HIGH | PASS | 41 tests PASS | Full validation logic + boundary tests (49 tests in crate) |
 
 ### M2 — MARKET DATA CONNECTION
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
-| M2-T01 | WebSocket client | NOT STARTED | CRITICAL | — | — | |
+| M2-T01 | WebSocket client | DONE | CRITICAL | PASS | 3 tests PASS | Triển khai client async WebSocket & channel event streaming |
 | M2-T02 | Authentication | NOT STARTED | CRITICAL | — | — | |
 | M2-T03 | Subscription management | NOT STARTED | CRITICAL | — | — | |
 | M2-T04 | Message parsing | NOT STARTED | CRITICAL | — | — | |
@@ -238,15 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M1-T04 — Error model
-- Objective: Hoàn thiện mô hình Error domain toàn diện trong `crates/domain/src/errors.rs` bằng `thiserror` (MarketDataError, IndicatorError, RiskError, SignalError, ModelError, AlertError).
+- Task: M2-T02 — Authentication handling
+- Objective: Hiện thực hoá cơ chế xác thực phiên kết nối WebSocket / Data Provider (API Key, Private Key, Bearer Token hoặc Auth Handshake Frame) hỗ trợ đa sàn và mock environment.
 - Expected Output:
-  1. Phân loại đầy đủ các biến thể lỗi theo domain trong `DomainError`.
-  2. Implement `From` conversion phù hợp giữa các loại lỗi chi tiết sang `DomainError`.
-  3. Unit tests kiểm tra `Display` format và `From` trait conversions.
+  1. Module `crates/market-data/src/auth.rs` đóng gói cấu trúc credentials, headers hoặc auth payload.
+  2. Trait / Struct quản lý tạo auth frame hoặc token refresh khi kết nối/reconnect.
+  3. Unit tests xác thực thành công và từ chối khi thông tin xác thực sai/thiếu.
 - Acceptance Criteria:
-  - [ ] Hệ thống Error có cấu trúc phân lớp rõ ràng, không nuốt error context (`#[source]`).
-  - [ ] Unit tests pass 100%.
+  - [ ] Đóng gói auth payload / token format theo chuẩn an toàn (không leak secret).
+  - [ ] Xử lý lỗi xác thực không hợp lệ trả về `MarketDataError` hoặc `DomainError`.
+  - [ ] Unit tests đầy đủ kiểm tra các trường hợp hợp lệ và không hợp lệ.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -258,6 +259,8 @@
 | Date | Decision | Reason | Impact |
 |---|---|---|---|
 | 2026-08-24 | Khởi tạo Workspace 14 Crates | Phân tách module độc lập theo Event-Driven Architecture | Tăng tính module hóa, biên dịch độc lập và test dễ dàng |
+| 2026-08-27 | Tách nhỏ phương thức `validate()` cho từng config struct | Tuân thủ Single Responsibility & DRY | Dễ viết unit test độc lập và tái sử dụng cho 3 risk profiles |
+| 2026-08-27 | Sử dụng Bounded MPSC Channel cho WebSocket Streaming | Kiểm soát áp lực dữ liệu (Backpressure) và chống OOM | Giữ độ ổn định bộ nhớ khi dữ liệu thị trường bùng nổ |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -273,6 +276,9 @@
 | 2026-08-26 | M1-T01: Configuration Loader & Domain Error Model | PASS | PASS | 3 unit tests PASS | `AppConfig::from_str`, `from_file`, `ConfigError` |
 | 2026-08-26 | M1-T02: Environment handling & Secret Loading | PASS | PASS | 3 unit tests PASS | `TelegramConfig::load_bot_token` with env resolution & validation |
 | 2026-08-26 | M1-T03: Structured logging | PASS | PASS | 1 unit test PASS | `init_logging` with fallback EnvFilter & try_init |
+| 2026-08-26 | M1-T04: Error model (thiserror & Domain taxonomy) | PASS | PASS | 2 unit tests PASS | `DomainError` taxonomy & From trait tests |
+| 2026-08-27 | M1-T05: Runtime configuration validation | PASS | PASS | 41 unit tests PASS | Hoàn thành validate toàn diện cho 9 config structs |
+| 2026-08-27 | M2-T01: WebSocket client | PASS | PASS | 3 unit tests PASS | `WebSocketClient`, Bounded channel streaming, 3 mock server tests |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.

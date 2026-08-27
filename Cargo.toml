@@ -27,6 +27,7 @@ license = "MIT OR Apache-2.0"
 # Async Runtime
 tokio = { version = "1.43", features = ["full"] }
 tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
+futures-util = "0.3"
 async-trait = "0.1"
 
 # Serialization & Configuration
