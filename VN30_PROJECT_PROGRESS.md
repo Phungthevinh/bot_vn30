@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M2 — Market Data Connection
 - Current Module: `crates/market-data`
-- Current Task: M2-T02 — Authentication
-- Overall Progress: 15%
-- Last Updated: 2026-08-27 23:05
+- Current Task: M2-T03 — Subscription management
+- Overall Progress: 16%
+- Last Updated: 2026-08-28 21:05
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -35,7 +35,7 @@
 |---|---|---|---:|---|---|
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
-| M2 | Market Data Connection | IN PROGRESS | 13% | IN PROGRESS | M2-T01 PASS (3 tests), chuẩn bị M2-T02 |
+| M2 | Market Data Connection | IN PROGRESS | 25% | IN PROGRESS | M2-T01, M2-T02 PASS (12 tests trong crate), chuẩn bị M2-T03 |
 | M3 | Data Normalization | NOT STARTED | 0% | — | |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
@@ -76,7 +76,7 @@
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
 | M2-T01 | WebSocket client | DONE | CRITICAL | PASS | 3 tests PASS | Triển khai client async WebSocket & channel event streaming |
-| M2-T02 | Authentication | NOT STARTED | CRITICAL | — | — | |
+| M2-T02 | Authentication | DONE | CRITICAL | PASS | 9 tests PASS | `DefaultAuthenticator`, `AuthMethod`, JSON auth payload & response verification |
 | M2-T03 | Subscription management | NOT STARTED | CRITICAL | — | — | |
 | M2-T04 | Message parsing | NOT STARTED | CRITICAL | — | — | |
 | M2-T05 | Connection health check | NOT STARTED | HIGH | — | — | |
@@ -238,16 +238,17 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M2-T02 — Authentication handling
-- Objective: Hiện thực hoá cơ chế xác thực phiên kết nối WebSocket / Data Provider (API Key, Private Key, Bearer Token hoặc Auth Handshake Frame) hỗ trợ đa sàn và mock environment.
+- Task: M2-T03 — Subscription management
+- Objective: Hiện thực hoá cơ chế quản lý danh sách đăng ký nhận dữ liệu thời gian thực cho rổ VN30 (Symbols registration, dynamic subscribe/unsubscribe, deduplication, frame generation).
 - Expected Output:
-  1. Module `crates/market-data/src/auth.rs` đóng gói cấu trúc credentials, headers hoặc auth payload.
-  2. Trait / Struct quản lý tạo auth frame hoặc token refresh khi kết nối/reconnect.
-  3. Unit tests xác thực thành công và từ chối khi thông tin xác thực sai/thiếu.
+  1. Module `crates/market-data/src/subscription.rs` quản lý danh sách symbols cần subscribe.
+  2. Struct / Trait tạo frame đăng ký (`subscribe`) và hủy đăng ký (`unsubscribe`) theo chuẩn JSON của data provider.
+  3. Unit tests xác thực chuỗi frame sinh ra, chuẩn hoá ticker (uppercase, trim) và chống trùng lặp symbol.
 - Acceptance Criteria:
-  - [ ] Đóng gói auth payload / token format theo chuẩn an toàn (không leak secret).
-  - [ ] Xử lý lỗi xác thực không hợp lệ trả về `MarketDataError` hoặc `DomainError`.
-  - [ ] Unit tests đầy đủ kiểm tra các trường hợp hợp lệ và không hợp lệ.
+  - [ ] Quản lý danh sách symbols không trùng lặp (deduplication & trim uppercase).
+  - [ ] Sinh frame subscribe / unsubscribe theo đúng schema sàn.
+  - [ ] Xử lý thêm/bớt symbol động thread-safe/an toàn.
+  - [ ] Unit tests đầy đủ kiểm tra các trường hợp.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -261,6 +262,7 @@
 | 2026-08-24 | Khởi tạo Workspace 14 Crates | Phân tách module độc lập theo Event-Driven Architecture | Tăng tính module hóa, biên dịch độc lập và test dễ dàng |
 | 2026-08-27 | Tách nhỏ phương thức `validate()` cho từng config struct | Tuân thủ Single Responsibility & DRY | Dễ viết unit test độc lập và tái sử dụng cho 3 risk profiles |
 | 2026-08-27 | Sử dụng Bounded MPSC Channel cho WebSocket Streaming | Kiểm soát áp lực dữ liệu (Backpressure) và chống OOM | Giữ độ ổn định bộ nhớ khi dữ liệu thị trường bùng nổ |
+| 2026-08-28 | Redact Secret / Token trong Auth payload và phân tách Trait Authenticator | Đảm bảo an toàn bảo mật, chống leak credentials và hỗ trợ đa phương thức xác thực | Dễ dàng switch giữa Mock Auth và Production Broker Auth |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -279,6 +281,7 @@
 | 2026-08-26 | M1-T04: Error model (thiserror & Domain taxonomy) | PASS | PASS | 2 unit tests PASS | `DomainError` taxonomy & From trait tests |
 | 2026-08-27 | M1-T05: Runtime configuration validation | PASS | PASS | 41 unit tests PASS | Hoàn thành validate toàn diện cho 9 config structs |
 | 2026-08-27 | M2-T01: WebSocket client | PASS | PASS | 3 unit tests PASS | `WebSocketClient`, Bounded channel streaming, 3 mock server tests |
+| 2026-08-28 | M2-T02: Authentication handling | PASS | PASS | 9 unit tests PASS | `DefaultAuthenticator`, `AuthMethod`, JSON auth payload, response verification & error handling |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.

@@ -478,7 +478,10 @@ mod tests {
             result.err()
         );
         let config = result.unwrap();
-        assert!(config.validate().is_ok(), "Example config failed validation");
+        assert!(
+            config.validate().is_ok(),
+            "Example config failed validation"
+        );
     }
 
     #[test]
@@ -510,7 +513,10 @@ mod tests {
     fn test_app_config_validate_propagates_child_error() {
         let mut config = sample_valid_app_config();
         config.server.environment = "invalid_env".to_string();
-        assert!(matches!(config.validate(), Err(ConfigError::ValidationError(_))));
+        assert!(matches!(
+            config.validate(),
+            Err(ConfigError::ValidationError(_))
+        ));
     }
 
     // --- ServerConfig Validation Tests ---
@@ -523,7 +529,10 @@ mod tests {
                     environment: env.to_string(),
                     log_level: level.to_string(),
                 };
-                assert!(cfg.validate().is_ok(), "Failed for env: {env}, level: {level}");
+                assert!(
+                    cfg.validate().is_ok(),
+                    "Failed for env: {env}, level: {level}"
+                );
             }
         }
     }
@@ -534,7 +543,9 @@ mod tests {
             environment: "staging".to_string(),
             log_level: "info".to_string(),
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("environment")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("environment"))
+        );
     }
 
     #[test]
@@ -543,7 +554,9 @@ mod tests {
             environment: "development".to_string(),
             log_level: "verbose".to_string(),
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("log level")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("log level"))
+        );
     }
 
     // --- MarketDataConfig Validation Tests ---
@@ -561,35 +574,45 @@ mod tests {
     fn test_market_data_invalid_provider() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.provider = "BINANCE".to_string();
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("provider")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("provider"))
+        );
     }
 
     #[test]
     fn test_market_data_empty_ws_endpoint() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.ws_endpoint = "   ".to_string();
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("ws_endpoint")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("ws_endpoint"))
+        );
     }
 
     #[test]
     fn test_market_data_invalid_endpoint_scheme() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.ws_endpoint = "http://api.provider.vn/stream".to_string();
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("ws:// or wss://")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("ws:// or wss://"))
+        );
     }
 
     #[test]
     fn test_market_data_zero_initial_backoff() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.reconnect_initial_backoff_ms = 0;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("reconnect_initial_backoff_ms")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("reconnect_initial_backoff_ms"))
+        );
     }
 
     #[test]
     fn test_market_data_zero_max_backoff() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.reconnect_max_backoff_ms = 0;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("reconnect_max_backoff_ms")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("reconnect_max_backoff_ms"))
+        );
     }
 
     #[test]
@@ -597,21 +620,27 @@ mod tests {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.reconnect_initial_backoff_ms = 5000;
         cfg.reconnect_max_backoff_ms = 1000;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("greater than or equal to reconnect_initial_backoff_ms")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("greater than or equal to reconnect_initial_backoff_ms"))
+        );
     }
 
     #[test]
     fn test_market_data_zero_heartbeat() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.heartbeat_interval_secs = 0;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("heartbeat_interval_secs")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("heartbeat_interval_secs"))
+        );
     }
 
     #[test]
     fn test_market_data_zero_staleness() {
         let mut cfg = sample_valid_app_config().market_data;
         cfg.max_tick_staleness_secs = 0;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("max_tick_staleness_secs")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("max_tick_staleness_secs"))
+        );
     }
 
     // --- BasketConfig Validation Tests ---
@@ -626,21 +655,27 @@ mod tests {
     fn test_basket_config_empty_symbols() {
         let mut cfg = sample_valid_app_config().basket;
         cfg.symbols = vec![];
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("empty")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("empty"))
+        );
     }
 
     #[test]
     fn test_basket_config_blank_symbol() {
         let mut cfg = sample_valid_app_config().basket;
         cfg.symbols = vec!["ACB".to_string(), "  ".to_string()];
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("Invalid symbol")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("Invalid symbol"))
+        );
     }
 
     #[test]
     fn test_basket_config_duplicate_symbols() {
         let mut cfg = sample_valid_app_config().basket;
         cfg.symbols = vec!["ACB".to_string(), "FPT".to_string(), "ACB".to_string()];
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("Duplicate symbols")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("Duplicate symbols"))
+        );
     }
 
     #[test]
@@ -648,7 +683,10 @@ mod tests {
         let mut cfg = sample_valid_app_config().basket;
         for invalid_time in ["08:00", "25:00:00", "invalid_time", "08:60:00"] {
             cfg.sync_time = invalid_time.to_string();
-            assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("sync_time")), "Failed for {invalid_time}");
+            assert!(
+                matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("sync_time")),
+                "Failed for {invalid_time}"
+            );
         }
     }
 
@@ -656,14 +694,20 @@ mod tests {
 
     #[test]
     fn test_state_store_config_valid() {
-        let cfg = StateStoreConfig { rolling_window_size: 500 };
+        let cfg = StateStoreConfig {
+            rolling_window_size: 500,
+        };
         assert!(cfg.validate().is_ok());
     }
 
     #[test]
     fn test_state_store_config_zero_window() {
-        let cfg = StateStoreConfig { rolling_window_size: 0 };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("rolling_window_size")));
+        let cfg = StateStoreConfig {
+            rolling_window_size: 0,
+        };
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("rolling_window_size"))
+        );
     }
 
     // --- FeaturesConfig Validation Tests ---
@@ -692,7 +736,9 @@ mod tests {
             beta_lookback_bars: 0,
             min_valid_samples: 30,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("beta_lookback_bars")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("beta_lookback_bars"))
+        );
     }
 
     #[test]
@@ -701,7 +747,9 @@ mod tests {
             beta_lookback_bars: 90,
             min_valid_samples: 0,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("min_valid_samples")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("min_valid_samples"))
+        );
     }
 
     #[test]
@@ -710,7 +758,9 @@ mod tests {
             beta_lookback_bars: 30,
             min_valid_samples: 90,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("greater than beta_lookback_bars")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("greater than beta_lookback_bars"))
+        );
     }
 
     // --- ModelConfig Validation Tests ---
@@ -732,7 +782,9 @@ mod tests {
             retrain_schedule: "sunday".to_string(),
             min_confidence_score: 0.75,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("artifact_path")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("artifact_path"))
+        );
     }
 
     #[test]
@@ -742,7 +794,9 @@ mod tests {
             retrain_schedule: "  ".to_string(),
             min_confidence_score: 0.75,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("retrain_schedule")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("retrain_schedule"))
+        );
     }
 
     #[test]
@@ -764,10 +818,14 @@ mod tests {
             retrain_schedule: "sunday".to_string(),
             min_confidence_score: -0.01,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("min_confidence_score")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("min_confidence_score"))
+        );
 
         cfg.min_confidence_score = 1.01;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("min_confidence_score")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("min_confidence_score"))
+        );
     }
 
     // --- RiskLevelConfig & RiskProfilesConfig Validation Tests ---
@@ -795,10 +853,14 @@ mod tests {
             beta_min: None,
             beta_max: None,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("target_min or target_max")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("target_min or target_max"))
+        );
 
         cfg.target_min = -0.05;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("target_min or target_max")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("target_min or target_max"))
+        );
     }
 
     #[test]
@@ -811,7 +873,9 @@ mod tests {
             beta_min: None,
             beta_max: None,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("target_min or target_max")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("target_min or target_max"))
+        );
     }
 
     #[test]
@@ -824,7 +888,9 @@ mod tests {
             beta_min: None,
             beta_max: None,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("sl_min or sl_max")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("sl_min or sl_max"))
+        );
     }
 
     #[test]
@@ -837,7 +903,9 @@ mod tests {
             beta_min: None,
             beta_max: None,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("sl_min or sl_max")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("sl_min or sl_max"))
+        );
     }
 
     #[test]
@@ -850,7 +918,9 @@ mod tests {
             beta_min: Some(1.5),
             beta_max: Some(1.0),
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("beta_min or beta_max")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("beta_min or beta_max"))
+        );
     }
 
     #[test]
@@ -863,7 +933,10 @@ mod tests {
     fn test_risk_profiles_invalid_safe_profile() {
         let mut cfg = sample_valid_app_config().risk;
         cfg.safe.target_min = -0.1;
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(_))));
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::ValidationError(_))
+        ));
     }
 
     // --- TelegramConfig Validation & Token Loading Tests ---
@@ -885,7 +958,9 @@ mod tests {
             chat_allowlist: vec![],
             debounce_cooldown_mins: 0,
         };
-        assert!(matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("bot_token_env")));
+        assert!(
+            matches!(cfg.validate(), Err(ConfigError::ValidationError(msg)) if msg.contains("bot_token_env"))
+        );
     }
 
     #[test]

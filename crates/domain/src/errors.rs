@@ -26,6 +26,8 @@ pub enum MarketDataError {
     InvalidData { symbol: String, reason: String },
     #[error("Dữ liệu thị trường bị quá hạn (stale): timestamp={0}")]
     StaleData(i64),
+    #[error("Lỗi xác thực: {0}")]
+    AuthenticationError(String),
 }
 
 #[derive(Error, Debug)]

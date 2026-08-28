@@ -148,7 +148,9 @@ mod tests {
         let received = rx.recv().await;
         assert_eq!(
             received,
-            Some(RawMarketMessage::Text("{\"type\":\"heartbeat\"}".to_string()))
+            Some(RawMarketMessage::Text(
+                "{\"type\":\"heartbeat\"}".to_string()
+            ))
         );
 
         handle.abort();
@@ -187,14 +189,23 @@ mod tests {
                 .send(Message::Binary(vec![1, 2, 3].into()))
                 .await
                 .unwrap();
-            ws_stream.send(Message::Ping(vec![4, 5].into())).await.unwrap();
-            ws_stream.send(Message::Pong(vec![6, 7].into())).await.unwrap();
+            ws_stream
+                .send(Message::Ping(vec![4, 5].into()))
+                .await
+                .unwrap();
+            ws_stream
+                .send(Message::Pong(vec![6, 7].into()))
+                .await
+                .unwrap();
         });
 
         let client = WebSocketClient::new(ws_url, 10);
         let (mut rx, handle) = client.connect().await.unwrap();
 
-        assert_eq!(rx.recv().await, Some(RawMarketMessage::Binary(vec![1, 2, 3])));
+        assert_eq!(
+            rx.recv().await,
+            Some(RawMarketMessage::Binary(vec![1, 2, 3]))
+        );
         assert_eq!(rx.recv().await, Some(RawMarketMessage::Ping(vec![4, 5])));
         assert_eq!(rx.recv().await, Some(RawMarketMessage::Pong(vec![6, 7])));
 
