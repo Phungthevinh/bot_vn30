@@ -36,7 +36,10 @@ pub struct WebSocketClient {
 
 impl WebSocketClient {
     /// Khởi tạo instance WebSocketClient mới
-    pub fn new(endpoint: impl Into<String>, channel_capacity: usize) -> Self {
+    pub fn new<S>(endpoint: S, channel_capacity: usize) -> Self
+    where
+        S: Into<String>,
+    {
         Self {
             endpoint: endpoint.into(),
             channel_capacity,

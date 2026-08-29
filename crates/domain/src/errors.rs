@@ -28,6 +28,8 @@ pub enum MarketDataError {
     StaleData(i64),
     #[error("Lỗi xác thực: {0}")]
     AuthenticationError(String),
+    #[error("dữ liệu rỗng: {0}")]
+    EmptyData(String),
 }
 
 #[derive(Error, Debug)]

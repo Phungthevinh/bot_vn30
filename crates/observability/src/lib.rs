@@ -1,7 +1,6 @@
 //! Structured logging, metrics collection, and health checks.
 
-use std::str::FromStr;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 /// Khởi tạo hệ thống logging với tracing subscriber
 pub fn init_logging(log_level: &str) {

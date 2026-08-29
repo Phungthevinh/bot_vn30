@@ -18,4 +18,5 @@ models/*.bin
 logs/
 
 # Agent/Mentor master rules
-VN30_ANTIGRAVITY_MASTER_RULES.md
+*MASTER_RULES*
+VN30_ANTIGRAVITY_MASTER_RULES*.md
