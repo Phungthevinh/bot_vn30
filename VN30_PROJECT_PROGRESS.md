@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M2 — Market Data Connection
 - Current Module: `crates/market-data`
-- Current Task: M2-T05 — Connection health check
-- Overall Progress: 20%
-- Last Updated: 2026-08-30 16:45
+- Current Task: M2-T06 — Reconnect mechanism
+- Overall Progress: 22%
+- Last Updated: 2026-08-30 21:48
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -35,7 +35,7 @@
 |---|---|---|---:|---|---|
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
-| M2 | Market Data Connection | IN PROGRESS | 50% | IN PROGRESS | M2-T01..M2-T04 PASS (24 tests trong crate), chuẩn bị M2-T05 |
+| M2 | Market Data Connection | IN PROGRESS | 63% | IN PROGRESS | M2-T01..M2-T05 PASS (30 tests trong crate), chuẩn bị M2-T06 |
 | M3 | Data Normalization | NOT STARTED | 0% | — | |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
@@ -79,7 +79,7 @@
 | M2-T02 | Authentication | DONE | CRITICAL | PASS | 9 tests PASS | `DefaultAuthenticator`, `AuthMethod`, JSON auth payload & response verification |
 | M2-T03 | Subscription management | DONE | CRITICAL | PASS | 4 tests PASS | `SubscriptionManager`, dynamic subscribe/unsubscribe, deduplication & resubscribe frame |
 | M2-T04 | Message parsing | DONE | CRITICAL | PASS | 8 tests PASS | `MarketDataParser`, Tagged Enum deserialization, Trade/Quote/Heartbeat/Error parsing |
-| M2-T05 | Connection health check | NOT STARTED | HIGH | — | — | |
+| M2-T05 | Connection health check | DONE | HIGH | PASS | 6 tests PASS | `HealthMonitor`, AtomicU64 lock-free timestamp, phân cấp Dead/Stale/HeartbeatMissed/Healthy |
 | M2-T06 | Reconnect mechanism | NOT STARTED | CRITICAL | — | — | |
 | M2-T07 | Resubscribe mechanism | NOT STARTED | CRITICAL | — | — | |
 | M2-T08 | Backoff / retry policy | NOT STARTED | HIGH | — | — | |
@@ -238,16 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M2-T05 — Connection health check
-- Objective: Hiện thực hoá cơ chế giám sát sức khoẻ kết nối WebSocket (Heartbeat monitor, ping/pong ticker, phát hiện mất tín hiệu và timeout).
+- Task: M2-T06 — Reconnect mechanism
+- Objective: Xây dựng cơ chế tự động tái kết nối khi WebSocket stream bị ngắt hoặc phát hiện `Stale`/`Dead` từ `HealthMonitor`.
 - Expected Output:
-  1. Module `crates/market-data/src/health.rs` quản lý trạng thái sống còn của kết nối.
-  2. Định kỳ gửi ping / kiểm tra thời điểm nhận frame gần nhất (staleness / heartbeat timeout).
-  3. Báo động mất kết nối khi vượt ngưỡng timeout cấu hình để kích hoạt cơ chế tự phục hồi (`M2-T06`).
+  1. Tích hợp máy trạng thái tái kết nối (Reconnect State Machine) kết hợp `WebSocketClient` và `HealthMonitor`.
+  2. Xử lý logic ngắt kết nối cũ, giải phóng tài nguyên và tái thiết lập TCP/TLS handshake.
+  3. Kích hoạt chuỗi phục hồi: Re-connect $\rightarrow$ Re-authenticate (`M2-T02`) $\rightarrow$ Re-subscribe (`M2-T03`/`M2-T07`).
 - Acceptance Criteria:
-  - [ ] Theo dõi chính xác timestamp của frame cuối cùng nhận được.
-  - [ ] Phát hiện kết nối bị treo/mất tín hiệu (Silent Disconnect / Zombie Connection).
-  - [ ] Unit tests kiểm tra phát hiện timeout và duy trì trạng thái kết nối.
+  - [ ] Phát hiện sự cố ngắt đột ngột và kích hoạt luồng kết nối lại.
+  - [ ] Tự động chuyển đổi `ConnectionState` (Connected $\rightarrow$ Reconnecting $\rightarrow$ Connected/Closed).
+  - [ ] Unit/Integration tests giả lập ngắt socket và kiểm chứng quá trình reconnect thành công.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -264,6 +264,7 @@
 | 2026-08-28 | Redact Secret / Token trong Auth payload và phân tách Trait Authenticator | Đảm bảo an toàn bảo mật, chống leak credentials và hỗ trợ đa phương thức xác thực | Dễ dàng switch giữa Mock Auth và Production Broker Auth |
 | 2026-08-29 | Deduplication & Delta frame generation trong SubscriptionManager | Tiết kiệm băng thông, chống spam sàn và hỗ trợ tái đăng ký tự động khi reconnect | Giảm thiểu network I/O và đảm bảo tính nhất quán của active symbols |
 | 2026-08-30 | Sử dụng Serde Tagged Enum (`tag = "type"`) cho MarketMessage | Đảm bảo zero-cost deserialization, type safety và bắt lỗi schema nghiêm ngặt | Tăng tốc độ parsing và loại trừ overhead tự parse thủ công |
+| 2026-08-30 | AtomicU64 Lock-free Timestamp Tracking trong HealthMonitor | Đảm bảo an toàn đa luồng giữa WS reader loop và Health check ticker, zero-allocation và không block throughput | Giữ hiệu năng đọc message tối đa và phân định chính xác 4 trạng thái sức khỏe socket |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -285,6 +286,7 @@
 | 2026-08-28 | M2-T02: Authentication handling | PASS | PASS | 9 unit tests PASS | `DefaultAuthenticator`, `AuthMethod`, JSON auth payload, response verification & error handling |
 | 2026-08-29 | M2-T03: Subscription management | PASS | PASS | 4 unit tests PASS | `SubscriptionManager`, dynamic subscribe/unsubscribe, deduplication & resubscribe frame |
 | 2026-08-30 | M2-T04: Message parsing | PASS | PASS | 8 unit tests PASS | `MarketDataParser`, Tagged Enum deserialization, Trade/Quote/Heartbeat/Error parsing |
+| 2026-08-30 | M2-T05: Connection health check | PASS | PASS | 6 unit tests PASS | `HealthMonitor`, AtomicU64 lock-free tracking, 4-tier health states (`Dead`, `Stale`, `HeartbeatMissed`, `Healthy`) |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.
