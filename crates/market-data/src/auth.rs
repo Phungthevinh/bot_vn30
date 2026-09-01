@@ -46,7 +46,7 @@ impl Authenticator for DefaultAuthenticator {
                 }
                 let msg = json!({"type": "auth", "api_key": api_key, "secret_key": secret_key})
                     .to_string();
-                Ok(Some(msg))
+                return Ok(Some(msg));
             }
             AuthMethod::BearerToken(token) => {
                 if token.trim().is_empty() {

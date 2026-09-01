@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod health;
 pub mod parser;
+pub mod reconnect;
 pub mod subscription;
 pub mod websocket;
 

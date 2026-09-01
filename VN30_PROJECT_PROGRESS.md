@@ -5,11 +5,11 @@
 ## 1. PROJECT STATUS
 - Project: VN30 Real-Time Analyzer
 - Language: 100% Rust
-- Current Milestone: M2 — Market Data Connection
-- Current Module: `crates/market-data`
-- Current Task: M2-T06 — Reconnect mechanism
-- Overall Progress: 22%
-- Last Updated: 2026-08-30 21:48
+- Current Milestone: M3 — Data Normalization
+- Current Module: `crates/market-data` / `crates/domain`
+- Current Task: M3-T01 — Raw message → normalized event
+- Overall Progress: 26%
+- Last Updated: 2026-09-01 12:30
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -35,8 +35,8 @@
 |---|---|---|---:|---|---|
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
-| M2 | Market Data Connection | IN PROGRESS | 63% | IN PROGRESS | M2-T01..M2-T05 PASS (30 tests trong crate), chuẩn bị M2-T06 |
-| M3 | Data Normalization | NOT STARTED | 0% | — | |
+| M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
+| M3 | Data Normalization | IN PROGRESS | 0% | IN PROGRESS | Chuẩn bị triển khai M3-T01 |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
@@ -80,9 +80,9 @@
 | M2-T03 | Subscription management | DONE | CRITICAL | PASS | 4 tests PASS | `SubscriptionManager`, dynamic subscribe/unsubscribe, deduplication & resubscribe frame |
 | M2-T04 | Message parsing | DONE | CRITICAL | PASS | 8 tests PASS | `MarketDataParser`, Tagged Enum deserialization, Trade/Quote/Heartbeat/Error parsing |
 | M2-T05 | Connection health check | DONE | HIGH | PASS | 6 tests PASS | `HealthMonitor`, AtomicU64 lock-free timestamp, phân cấp Dead/Stale/HeartbeatMissed/Healthy |
-| M2-T06 | Reconnect mechanism | NOT STARTED | CRITICAL | — | — | |
-| M2-T07 | Resubscribe mechanism | NOT STARTED | CRITICAL | — | — | |
-| M2-T08 | Backoff / retry policy | NOT STARTED | HIGH | — | — | |
+| M2-T06 | Reconnect mechanism | DONE | CRITICAL | PASS | 6 tests PASS | Máy trạng thái Reconnect kết hợp tokio::select! và HealthMonitor |
+| M2-T07 | Resubscribe mechanism | DONE | CRITICAL | PASS | Tích hợp trong M2-T03/T06 | Tự động resubscribe danh sách symbol khi tái kết nối thành công |
+| M2-T08 | Backoff / retry policy | DONE | HIGH | PASS | 3 tests PASS | `ReconnectPolicy` tính toán exponential backoff và giới hạn max delay |
 
 ### M3 — DATA NORMALIZATION
 | ID | Task | Status | Priority | Review | Tests | Notes |
@@ -238,16 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M2-T06 — Reconnect mechanism
-- Objective: Xây dựng cơ chế tự động tái kết nối khi WebSocket stream bị ngắt hoặc phát hiện `Stale`/`Dead` từ `HealthMonitor`.
+- Task: M3-T01 — Raw message → normalized event
+- Objective: Chuyển đổi các thông điệp thô (Trade, Quote, Heartbeat) từ `MarketMessage` thành cấu trúc sự kiện miền chuẩn hóa (`NormalizedMarketEvent`).
 - Expected Output:
-  1. Tích hợp máy trạng thái tái kết nối (Reconnect State Machine) kết hợp `WebSocketClient` và `HealthMonitor`.
-  2. Xử lý logic ngắt kết nối cũ, giải phóng tài nguyên và tái thiết lập TCP/TLS handshake.
-  3. Kích hoạt chuỗi phục hồi: Re-connect $\rightarrow$ Re-authenticate (`M2-T02`) $\rightarrow$ Re-subscribe (`M2-T03`/`M2-T07`).
+  1. Thiết kế struct sự kiện chuẩn hóa `MarketEvent` và `NormalizedQuote` / `NormalizedTrade`.
+  2. Map chính xác các kiểu số thực tài chính (`Decimal` hoặc `f64` an toàn), volume và timestamp.
+  3. Bổ sung pipeline validation và chuyển đổi zero-copy/low-allocation.
 - Acceptance Criteria:
-  - [ ] Phát hiện sự cố ngắt đột ngột và kích hoạt luồng kết nối lại.
-  - [ ] Tự động chuyển đổi `ConnectionState` (Connected $\rightarrow$ Reconnecting $\rightarrow$ Connected/Closed).
-  - [ ] Unit/Integration tests giả lập ngắt socket và kiểm chứng quá trình reconnect thành công.
+  - [ ] Struct `NormalizedMarketEvent` chuẩn hóa cho VN30 data ingestion.
+  - [ ] Hàm chuẩn hóa xử lý đúng tất cả variants từ parser.
+  - [ ] Unit tests đầy đủ các ca chuẩn hóa hợp lệ và dữ liệu dị thường.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -265,6 +265,7 @@
 | 2026-08-29 | Deduplication & Delta frame generation trong SubscriptionManager | Tiết kiệm băng thông, chống spam sàn và hỗ trợ tái đăng ký tự động khi reconnect | Giảm thiểu network I/O và đảm bảo tính nhất quán của active symbols |
 | 2026-08-30 | Sử dụng Serde Tagged Enum (`tag = "type"`) cho MarketMessage | Đảm bảo zero-cost deserialization, type safety và bắt lỗi schema nghiêm ngặt | Tăng tốc độ parsing và loại trừ overhead tự parse thủ công |
 | 2026-08-30 | AtomicU64 Lock-free Timestamp Tracking trong HealthMonitor | Đảm bảo an toàn đa luồng giữa WS reader loop và Health check ticker, zero-allocation và không block throughput | Giữ hiệu năng đọc message tối đa và phân định chính xác 4 trạng thái sức khỏe socket |
+| 2026-09-01 | Biased `tokio::select!` kết hợp Exponential Backoff State Machine trong `MarketConnectionManager` | Ưu tiên đọc dữ liệu socket trước định kỳ health check, tự phục hồi khi rớt mạng hoặc socket treo ngầm | Đảm bảo luồng stream tự phục hồi 24/7, chống spam kết nối và loại trừ zombie reader |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -287,6 +288,7 @@
 | 2026-08-29 | M2-T03: Subscription management | PASS | PASS | 4 unit tests PASS | `SubscriptionManager`, dynamic subscribe/unsubscribe, deduplication & resubscribe frame |
 | 2026-08-30 | M2-T04: Message parsing | PASS | PASS | 8 unit tests PASS | `MarketDataParser`, Tagged Enum deserialization, Trade/Quote/Heartbeat/Error parsing |
 | 2026-08-30 | M2-T05: Connection health check | PASS | PASS | 6 unit tests PASS | `HealthMonitor`, AtomicU64 lock-free tracking, 4-tier health states (`Dead`, `Stale`, `HeartbeatMissed`, `Healthy`) |
+| 2026-09-01 | M2-T06..M2-T08: Reconnect mechanism, Resubscribe & Exponential Backoff Policy | PASS | PASS | 6 unit tests PASS | `MarketConnectionManager`, `ReconnectPolicy`, `connect_and_handshake`, biased `select!` loop (36 tests trong crate) |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.
