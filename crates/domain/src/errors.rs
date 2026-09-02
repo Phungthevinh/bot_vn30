@@ -30,6 +30,14 @@ pub enum MarketDataError {
     AuthenticationError(String),
     #[error("dữ liệu rỗng: {0}")]
     EmptyData(String),
+    #[error("Mã chứng khoán không hợp lệ: {0}")]
+    InvalidSymbol(String),
+    #[error("Giá không hợp lệ: {0}")]
+    InvalidPrice(String),
+    #[error("Khối lượng không hợp lệ: {0}")]
+    InvalidVolume(String),
+    #[error("Thời gian không hợp lệ: {0}")]
+    InvalidTimestamp(String),
 }
 
 #[derive(Error, Debug)]

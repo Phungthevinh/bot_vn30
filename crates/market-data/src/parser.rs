@@ -1,6 +1,7 @@
 use crate::RawMarketMessage;
 use serde::{Deserialize, Serialize};
 use vn30_domain::errors::MarketDataError;
+use vn30_domain::market::{MarketEvent, Quote, Trade};
 
 // 1. Các struct sự kiện chi tiết
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,6 +68,38 @@ impl MarketDataParser {
             .map_err(|e| MarketDataError::ParseError(e.to_string()))?;
 
         Ok(msg)
+    }
+}
+
+impl MarketMessage {
+    pub fn try_into_market_event(&self) -> Result<Option<MarketEvent>, MarketDataError> {
+        match self {
+            MarketMessage::Trade(trade) => {
+                let domain_trade = Trade::new(
+                    trade.symbol.clone(),
+                    trade.price,
+                    trade.volume,
+                    trade.timestamp,
+                )?;
+                Ok(Some(MarketEvent::Trade(domain_trade)))
+            }
+            MarketMessage::Quote(quote) => {
+                let domain_quote = Quote::new(
+                    quote.symbol.clone(),
+                    quote.bid_price,
+                    quote.bid_vol,
+                    quote.ask_price,
+                    quote.ask_vol,
+                    quote.timestamp,
+                )?;
+                Ok(Some(MarketEvent::Quote(domain_quote)))
+            }
+            MarketMessage::Heartbeat(_) => Ok(None),
+            MarketMessage::ExchangeError(err) => {
+                Err(MarketDataError::ParseError(err.message.clone()))
+            }
+            MarketMessage::Pong(_) => Ok(None),
+        }
     }
 }
 
@@ -146,8 +179,7 @@ mod tests {
             "message": "Token expired"
         }"#;
 
-        let msg =
-            MarketDataParser::parse_json(json_error).expect("Parse error tag should succeed");
+        let msg = MarketDataParser::parse_json(json_error).expect("Parse error tag should succeed");
         match msg {
             MarketMessage::ExchangeError(err) => {
                 assert_eq!(err.code, "AUTH_FAILED");
@@ -176,9 +208,8 @@ mod tests {
     #[test]
     fn test_parse_raw_market_message_variants() {
         // Text variant
-        let raw_text = RawMarketMessage::Text(
-            r#"{"type":"heartbeat","timestamp":1724900030}"#.to_string(),
-        );
+        let raw_text =
+            RawMarketMessage::Text(r#"{"type":"heartbeat","timestamp":1724900030}"#.to_string());
         let parsed_text = MarketDataParser::parse(&raw_text).expect("Parse text raw should work");
         assert_eq!(
             parsed_text,
@@ -254,6 +285,94 @@ mod tests {
         match result.unwrap_err() {
             MarketDataError::ParseError(msg) => {
                 assert!(msg.contains("unknown variant `news_alert`"));
+            }
+            other => panic!("Expected ParseError, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_try_into_market_event_trade_success() {
+        let msg = MarketMessage::Trade(TradeEvent {
+            symbol: "  hpg  ".to_string(),
+            price: 28500.0,
+            volume: 100.0,
+            timestamp: 1724900000,
+        });
+
+        let event = msg.try_into_market_event().expect("Chuyển đổi Trade thành công");
+        assert!(event.is_some());
+        match event.unwrap() {
+            MarketEvent::Trade(trade) => {
+                assert_eq!(trade.symbol, "HPG");
+                assert_eq!(trade.price, 28500.0);
+                assert_eq!(trade.volume, 100.0);
+                assert_eq!(trade.timestamp, 1724900000);
+            }
+            _ => panic!("Expected MarketEvent::Trade"),
+        }
+    }
+
+    #[test]
+    fn test_try_into_market_event_quote_success() {
+        let msg = MarketMessage::Quote(QuoteEvent {
+            symbol: "vnm".to_string(),
+            bid_price: 65000.0,
+            bid_vol: 200.0,
+            ask_price: 65100.0,
+            ask_vol: 150.0,
+            timestamp: 1724900000,
+        });
+
+        let event = msg.try_into_market_event().expect("Chuyển đổi Quote thành công");
+        assert!(event.is_some());
+        match event.unwrap() {
+            MarketEvent::Quote(quote) => {
+                assert_eq!(quote.symbol, "VNM");
+                assert_eq!(quote.bid_price, 65000.0);
+                assert_eq!(quote.bid_vol, 200.0);
+                assert_eq!(quote.ask_price, 65100.0);
+                assert_eq!(quote.ask_vol, 150.0);
+            }
+            _ => panic!("Expected MarketEvent::Quote"),
+        }
+    }
+
+    #[test]
+    fn test_try_into_market_event_trade_invalid_price_fails() {
+        let msg = MarketMessage::Trade(TradeEvent {
+            symbol: "HPG".to_string(),
+            price: -100.0,
+            volume: 100.0,
+            timestamp: 1724900000,
+        });
+
+        let result = msg.try_into_market_event();
+        assert!(matches!(result, Err(MarketDataError::InvalidPrice(_))));
+    }
+
+    #[test]
+    fn test_try_into_market_event_heartbeat_and_pong_none() {
+        let hb_msg = MarketMessage::Heartbeat(HeartbeatEvent {
+            timestamp: 1724900000,
+        });
+        assert_eq!(hb_msg.try_into_market_event().unwrap(), None);
+
+        let pong_msg = MarketMessage::Pong(vec![1, 2, 3]);
+        assert_eq!(pong_msg.try_into_market_event().unwrap(), None);
+    }
+
+    #[test]
+    fn test_try_into_market_event_exchange_error_returns_err() {
+        let err_msg = MarketMessage::ExchangeError(ExchangeErrorEvent {
+            code: "ERR_TIMEOUT".to_string(),
+            message: "Gateway timeout".to_string(),
+        });
+
+        let result = err_msg.try_into_market_event();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MarketDataError::ParseError(msg) => {
+                assert_eq!(msg, "Gateway timeout");
             }
             other => panic!("Expected ParseError, got {:?}", other),
         }
