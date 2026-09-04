@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M3 — Data Normalization
 - Current Module: `crates/market-data` / `crates/domain`
-- Current Task: M3-T02 — Symbol mapping
-- Overall Progress: 27%
-- Last Updated: 2026-09-02 22:45
+- Current Task: M3-T03 — Timestamp normalization
+- Overall Progress: 29%
+- Last Updated: 2026-09-04 22:55
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -36,7 +36,7 @@
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
-| M3 | Data Normalization | IN PROGRESS | 14% | IN PROGRESS | M3-T01 hoàn thành (13 tests PASS), chuẩn bị M3-T02 |
+| M3 | Data Normalization | IN PROGRESS | 29% | IN PROGRESS | M3-T01, M3-T02 hoàn thành (25 tests PASS), chuẩn bị M3-T03 |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
@@ -88,7 +88,7 @@
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
 | M3-T01 | Raw message → normalized event | DONE | CRITICAL | PASS | 13 tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` |
-| M3-T02 | Symbol mapping | NOT STARTED | HIGH | — | — | |
+| M3-T02 | Symbol mapping | DONE | HIGH | PASS | 12 tests PASS (6 domain + 6 market-data) | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data |
 | M3-T03 | Timestamp normalization | NOT STARTED | HIGH | — | — | |
 | M3-T04 | Invalid data validation | NOT STARTED | CRITICAL | — | — | |
 | M3-T05 | Duplicate detection | NOT STARTED | HIGH | — | — | |
@@ -238,15 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M3-T02 — Symbol mapping
-- Objective: Thiết kế và triển khai cơ chế chuẩn hóa mã chứng khoán (Symbol Mapping & Canonical Normalization) cho VN30 (chuyển đổi alias, sàn HOSE/HNX, hợp đồng phái sinh `VN30F*` sang canonical symbol).
+- Task: M3-T03 — Timestamp normalization
+- Objective: Chuẩn hóa timestamp dữ liệu thị trường (milliseconds vs seconds, epoch conversion, xử lý múi giờ UTC vs ICT `Asia/Ho_Chi_Minh`, phát hiện timestamp trong tương lai hoặc quá cũ).
 - Expected Output:
-  1. Cấu trúc `SymbolMapper` hoặc mapping rules chuẩn.
-  2. Hỗ trợ alias dictionary / pattern matching (ví dụ `HOSE:HPG` -> `HPG`, `VN30F1M` -> `VN30F2409`).
-  3. Xử lý validation chống symbol rác.
+  1. Cấu trúc `TimestampNormalizer` hoặc hàm chuẩn hóa timestamp về UTC epoch milliseconds (`i64`).
+  2. Logic kiểm tra timestamp hợp lệ (chống timestamp âm, timestamp tương lai vượt ngưỡng lệch cho phép).
+  3. Hỗ trợ chuyển đổi hiển thị múi giờ Việt Nam (`Asia/Ho_Chi_Minh`).
 - Acceptance Criteria:
-  - [ ] Module mapping xử lý đúng các tiền tố sàn / phái sinh.
-  - [ ] Unit tests đầy đủ các case mapping và invalid symbols.
+  - [ ] Chuẩn hóa chính xác về UTC milliseconds.
+  - [ ] Phát hiện và báo lỗi timestamp bất thường (drift / future / negative).
+  - [ ] Unit tests đầy đủ các case timestamp.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -266,6 +267,7 @@
 | 2026-08-30 | AtomicU64 Lock-free Timestamp Tracking trong HealthMonitor | Đảm bảo an toàn đa luồng giữa WS reader loop và Health check ticker, zero-allocation và không block throughput | Giữ hiệu năng đọc message tối đa và phân định chính xác 4 trạng thái sức khỏe socket |
 | 2026-09-01 | Biased `tokio::select!` kết hợp Exponential Backoff State Machine trong `MarketConnectionManager` | Ưu tiên đọc dữ liệu socket trước định kỳ health check, tự phục hồi khi rớt mạng hoặc socket treo ngầm | Đảm bảo luồng stream tự phục hồi 24/7, chống spam kết nối và loại trừ zombie reader |
 | 2026-09-02 | Tách Normalized Domain Event (`Trade`/`Quote`/`MarketEvent`) vào `vn30_domain::market` và tách biệt khỏi DTO WebSocket | Tuân thủ Clean Architecture, tránh circular dependency và đảm bảo downstream crate không phụ thuộc transport layer | Dễ dàng tái sử dụng cho backtesting, CSV feed và mock testing |
+| 2026-09-04 | Tách biệt Symbol Identity Normalization và Tradability Lifecycle, dùng `SymbolMapper` cho Alias Resolution | Đảm bảo tính tái sử dụng cho Replay/Backtest, hỗ trợ dynamic alias (VN30F1M -> VN30F2409) và fail-fast chống symbol rác | Domain độc lập với broker quirks; Ingestion adapter kiểm soát alias tại biên mạng |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -290,6 +292,7 @@
 | 2026-08-30 | M2-T05: Connection health check | PASS | PASS | 6 unit tests PASS | `HealthMonitor`, AtomicU64 lock-free tracking, 4-tier health states (`Dead`, `Stale`, `HeartbeatMissed`, `Healthy`) |
 | 2026-09-01 | M2-T06..M2-T08: Reconnect mechanism, Resubscribe & Exponential Backoff Policy | PASS | PASS | 6 unit tests PASS | `MarketConnectionManager`, `ReconnectPolicy`, `connect_and_handshake`, biased `select!` loop (36 tests trong crate) |
 | 2026-09-02 | M3-T01: Raw message → normalized event | PASS | PASS | 13 unit tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` (99 tests trong workspace) |
+| 2026-09-04 | M3-T02: Symbol mapping & Canonical Normalization | PASS | PASS | 12 unit tests PASS | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data (111 tests trong workspace) |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.
