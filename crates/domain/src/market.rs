@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::errors::MarketDataError;
+use crate::timestamp::MarketTimestamp;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trade {
     pub symbol: String,
     pub price: f64,
     pub volume: f64,
-    pub timestamp: i64,
+    pub timestamp: MarketTimestamp,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,7 +18,7 @@ pub struct Quote {
     pub bid_vol: f64,
     pub ask_price: f64,
     pub ask_vol: f64,
-    pub timestamp: i64,
+    pub timestamp: MarketTimestamp,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,7 +32,7 @@ impl Trade {
         symbol: String,
         price: f64,
         volume: f64,
-        timestamp: i64,
+        timestamp: MarketTimestamp,
     ) -> Result<Self, MarketDataError> {
         if symbol.trim().is_empty() {
             return Err(MarketDataError::InvalidSymbol(
@@ -48,13 +49,6 @@ impl Trade {
                 "khối lượng không hợp lệ".to_string(),
             ));
         }
-
-        if timestamp <= 0 {
-            return Err(MarketDataError::InvalidTimestamp(
-                "timestamp không hợp lệ".to_string(),
-            ));
-        }
-
         Ok(Self {
             symbol: symbol.trim().to_uppercase(),
             price,
@@ -71,7 +65,7 @@ impl Quote {
         bid_vol: f64,
         ask_price: f64,
         ask_vol: f64,
-        timestamp: i64,
+        timestamp: MarketTimestamp,
     ) -> Result<Self, MarketDataError> {
         if symbol.trim().is_empty() {
             return Err(MarketDataError::InvalidSymbol(
@@ -98,11 +92,6 @@ impl Quote {
                 "ask_vol không hợp lệ".to_string(),
             ));
         }
-        if timestamp <= 0 {
-            return Err(MarketDataError::InvalidTimestamp(
-                "timestamp không hợp lệ".to_string(),
-            ));
-        }
 
         Ok(Self {
             symbol: symbol.trim().to_uppercase(),
@@ -119,68 +108,75 @@ impl Quote {
 mod tests {
     use super::*;
 
+    fn dummy_ts() -> MarketTimestamp {
+        MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ")
+    }
+
     #[test]
     fn test_trade_valid_and_normalization() {
-        let trade = Trade::new("  vnm  ".to_string(), 65000.0, 100.0, 1725300000)
-            .expect("Hợp lệ");
+        let trade = Trade::new("  vnm  ".to_string(), 65000.0, 100.0, dummy_ts()).expect("Hợp lệ");
         assert_eq!(trade.symbol, "VNM");
         assert_eq!(trade.price, 65000.0);
         assert_eq!(trade.volume, 100.0);
-        assert_eq!(trade.timestamp, 1725300000);
+        assert_eq!(trade.timestamp, dummy_ts());
     }
 
     #[test]
     fn test_trade_invalid_symbol() {
-        let err_empty = Trade::new("".to_string(), 65000.0, 100.0, 1725300000);
+        let err_empty = Trade::new("".to_string(), 65000.0, 100.0, dummy_ts());
         assert!(matches!(err_empty, Err(MarketDataError::InvalidSymbol(_))));
 
-        let err_spaces = Trade::new("   ".to_string(), 65000.0, 100.0, 1725300000);
+        let err_spaces = Trade::new("   ".to_string(), 65000.0, 100.0, dummy_ts());
         assert!(matches!(err_spaces, Err(MarketDataError::InvalidSymbol(_))));
     }
 
     #[test]
     fn test_trade_invalid_price() {
         // Giá bằng 0
-        let err_zero = Trade::new("VNM".to_string(), 0.0, 100.0, 1725300000);
+        let err_zero = Trade::new("VNM".to_string(), 0.0, 100.0, dummy_ts());
         assert!(matches!(err_zero, Err(MarketDataError::InvalidPrice(_))));
 
         // Giá âm
-        let err_neg = Trade::new("VNM".to_string(), -10.0, 100.0, 1725300000);
+        let err_neg = Trade::new("VNM".to_string(), -10.0, 100.0, dummy_ts());
         assert!(matches!(err_neg, Err(MarketDataError::InvalidPrice(_))));
 
         // Giá NaN hoặc Infinity
-        let err_nan = Trade::new("VNM".to_string(), f64::NAN, 100.0, 1725300000);
+        let err_nan = Trade::new("VNM".to_string(), f64::NAN, 100.0, dummy_ts());
         assert!(matches!(err_nan, Err(MarketDataError::InvalidPrice(_))));
 
-        let err_inf = Trade::new("VNM".to_string(), f64::INFINITY, 100.0, 1725300000);
+        let err_inf = Trade::new("VNM".to_string(), f64::INFINITY, 100.0, dummy_ts());
         assert!(matches!(err_inf, Err(MarketDataError::InvalidPrice(_))));
     }
 
     #[test]
     fn test_trade_invalid_volume() {
-        let err_zero = Trade::new("VNM".to_string(), 65000.0, 0.0, 1725300000);
+        let err_zero = Trade::new("VNM".to_string(), 65000.0, 0.0, dummy_ts());
         assert!(matches!(err_zero, Err(MarketDataError::InvalidVolume(_))));
 
-        let err_neg = Trade::new("VNM".to_string(), 65000.0, -1.0, 1725300000);
+        let err_neg = Trade::new("VNM".to_string(), 65000.0, -1.0, dummy_ts());
         assert!(matches!(err_neg, Err(MarketDataError::InvalidVolume(_))));
 
-        let err_nan = Trade::new("VNM".to_string(), 65000.0, f64::NAN, 1725300000);
+        let err_nan = Trade::new("VNM".to_string(), 65000.0, f64::NAN, dummy_ts());
         assert!(matches!(err_nan, Err(MarketDataError::InvalidVolume(_))));
     }
 
     #[test]
     fn test_trade_invalid_timestamp() {
-        let err_zero = Trade::new("VNM".to_string(), 65000.0, 100.0, 0);
-        assert!(matches!(err_zero, Err(MarketDataError::InvalidTimestamp(_))));
-
-        let err_neg = Trade::new("VNM".to_string(), 65000.0, 100.0, -100);
-        assert!(matches!(err_neg, Err(MarketDataError::InvalidTimestamp(_))));
+        assert!(MarketTimestamp::from_epoch_millis(0).is_err());
+        assert!(MarketTimestamp::from_epoch_millis(-100).is_err());
     }
 
     #[test]
     fn test_quote_valid_and_normalization() {
-        let quote = Quote::new(" hpg ".to_string(), 28500.0, 200.0, 28550.0, 150.0, 1725300000)
-            .expect("Quote hợp lệ");
+        let quote = Quote::new(
+            " hpg ".to_string(),
+            28500.0,
+            200.0,
+            28550.0,
+            150.0,
+            dummy_ts(),
+        )
+        .expect("Quote hợp lệ");
         assert_eq!(quote.symbol, "HPG");
         assert_eq!(quote.bid_price, 28500.0);
         assert_eq!(quote.bid_vol, 200.0);
@@ -188,7 +184,7 @@ mod tests {
         assert_eq!(quote.ask_vol, 150.0);
 
         // Trường hợp kịch trần (ask_vol = 0.0 hoặc ask_price = 0.0)
-        let quote_ceiling = Quote::new("HPG".to_string(), 30000.0, 500.0, 0.0, 0.0, 1725300000)
+        let quote_ceiling = Quote::new("HPG".to_string(), 30000.0, 500.0, 0.0, 0.0, dummy_ts())
             .expect("Quote tăng trần hợp lệ");
         assert_eq!(quote_ceiling.ask_vol, 0.0);
     }
@@ -196,31 +192,55 @@ mod tests {
     #[test]
     fn test_quote_invalid_fields() {
         // Mã rỗng
-        let err_sym = Quote::new("".to_string(), 28500.0, 100.0, 28550.0, 100.0, 1725300000);
+        let err_sym = Quote::new("".to_string(), 28500.0, 100.0, 28550.0, 100.0, dummy_ts());
         assert!(matches!(err_sym, Err(MarketDataError::InvalidSymbol(_))));
 
         // Giá âm hoặc NaN
-        let err_bid_neg = Quote::new("HPG".to_string(), -1.0, 100.0, 28550.0, 100.0, 1725300000);
+        let err_bid_neg = Quote::new("HPG".to_string(), -1.0, 100.0, 28550.0, 100.0, dummy_ts());
         assert!(matches!(err_bid_neg, Err(MarketDataError::InvalidPrice(_))));
 
-        let err_ask_nan = Quote::new("HPG".to_string(), 28500.0, 100.0, f64::NAN, 100.0, 1725300000);
+        let err_ask_nan = Quote::new(
+            "HPG".to_string(),
+            28500.0,
+            100.0,
+            f64::NAN,
+            100.0,
+            dummy_ts(),
+        );
         assert!(matches!(err_ask_nan, Err(MarketDataError::InvalidPrice(_))));
 
         // Khối lượng âm hoặc NaN
-        let err_bid_vol_neg = Quote::new("HPG".to_string(), 28500.0, -10.0, 28550.0, 100.0, 1725300000);
-        assert!(matches!(err_bid_vol_neg, Err(MarketDataError::InvalidVolume(_))));
+        let err_bid_vol_neg = Quote::new(
+            "HPG".to_string(),
+            28500.0,
+            -10.0,
+            28550.0,
+            100.0,
+            dummy_ts(),
+        );
+        assert!(matches!(
+            err_bid_vol_neg,
+            Err(MarketDataError::InvalidVolume(_))
+        ));
 
         // Timestamp âm
-        let err_ts = Quote::new("HPG".to_string(), 28500.0, 100.0, 28550.0, 100.0, -1);
-        assert!(matches!(err_ts, Err(MarketDataError::InvalidTimestamp(_))));
+        assert!(MarketTimestamp::from_epoch_millis(-1).is_err());
     }
 
     #[test]
     fn test_market_event_variants() {
-        let trade = Trade::new("HPG".to_string(), 28500.0, 100.0, 1725300000).unwrap();
+        let trade = Trade::new("HPG".to_string(), 28500.0, 100.0, dummy_ts()).unwrap();
         let event_trade = MarketEvent::Trade(trade.clone());
 
-        let quote = Quote::new("HPG".to_string(), 28500.0, 100.0, 28550.0, 100.0, 1725300000).unwrap();
+        let quote = Quote::new(
+            "HPG".to_string(),
+            28500.0,
+            100.0,
+            28550.0,
+            100.0,
+            dummy_ts(),
+        )
+        .unwrap();
         let event_quote = MarketEvent::Quote(quote.clone());
 
         match event_trade {

@@ -2,6 +2,7 @@ use crate::RawMarketMessage;
 use serde::{Deserialize, Serialize};
 use vn30_domain::errors::MarketDataError;
 use vn30_domain::market::{MarketEvent, Quote, Trade};
+use vn30_domain::timestamp::MarketTimestamp;
 
 // 1. Các struct sự kiện chi tiết
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -75,22 +76,19 @@ impl MarketMessage {
     pub fn try_into_market_event(&self) -> Result<Option<MarketEvent>, MarketDataError> {
         match self {
             MarketMessage::Trade(trade) => {
-                let domain_trade = Trade::new(
-                    trade.symbol.clone(),
-                    trade.price,
-                    trade.volume,
-                    trade.timestamp,
-                )?;
+                let ts = MarketTimestamp::from_raw_epoch(trade.timestamp)?;
+                let domain_trade = Trade::new(trade.symbol.clone(), trade.price, trade.volume, ts)?;
                 Ok(Some(MarketEvent::Trade(domain_trade)))
             }
             MarketMessage::Quote(quote) => {
+                let ts = MarketTimestamp::from_raw_epoch(quote.timestamp)?;
                 let domain_quote = Quote::new(
                     quote.symbol.clone(),
                     quote.bid_price,
                     quote.bid_vol,
                     quote.ask_price,
                     quote.ask_vol,
-                    quote.timestamp,
+                    ts,
                 )?;
                 Ok(Some(MarketEvent::Quote(domain_quote)))
             }
@@ -299,14 +297,16 @@ mod tests {
             timestamp: 1724900000,
         });
 
-        let event = msg.try_into_market_event().expect("Chuyển đổi Trade thành công");
+        let event = msg
+            .try_into_market_event()
+            .expect("Chuyển đổi Trade thành công");
         assert!(event.is_some());
         match event.unwrap() {
             MarketEvent::Trade(trade) => {
                 assert_eq!(trade.symbol, "HPG");
                 assert_eq!(trade.price, 28500.0);
                 assert_eq!(trade.volume, 100.0);
-                assert_eq!(trade.timestamp, 1724900000);
+                assert_eq!(trade.timestamp.timestamp_secs(), 1724900000);
             }
             _ => panic!("Expected MarketEvent::Trade"),
         }
@@ -323,7 +323,9 @@ mod tests {
             timestamp: 1724900000,
         });
 
-        let event = msg.try_into_market_event().expect("Chuyển đổi Quote thành công");
+        let event = msg
+            .try_into_market_event()
+            .expect("Chuyển đổi Quote thành công");
         assert!(event.is_some());
         match event.unwrap() {
             MarketEvent::Quote(quote) => {

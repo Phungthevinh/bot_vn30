@@ -3,3 +3,4 @@ pub mod config;
 pub mod errors;
 pub mod market;
 pub mod symbol;
+pub mod timestamp;

@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M3 — Data Normalization
 - Current Module: `crates/market-data` / `crates/domain`
-- Current Task: M3-T03 — Timestamp normalization
-- Overall Progress: 29%
-- Last Updated: 2026-09-04 22:55
+- Current Task: M3-T04 — Invalid data validation
+- Overall Progress: 31%
+- Last Updated: 2026-09-06 23:25
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -36,7 +36,7 @@
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
-| M3 | Data Normalization | IN PROGRESS | 29% | IN PROGRESS | M3-T01, M3-T02 hoàn thành (25 tests PASS), chuẩn bị M3-T03 |
+| M3 | Data Normalization | IN PROGRESS | 43% | IN PROGRESS | M3-T01..M3-T03 hoàn thành (33 tests PASS), chuẩn bị M3-T04 |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
@@ -89,7 +89,7 @@
 |---|---|---|---|---|---|---|
 | M3-T01 | Raw message → normalized event | DONE | CRITICAL | PASS | 13 tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` |
 | M3-T02 | Symbol mapping | DONE | HIGH | PASS | 12 tests PASS (6 domain + 6 market-data) | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data |
-| M3-T03 | Timestamp normalization | NOT STARTED | HIGH | — | — | |
+| M3-T03 | Timestamp normalization | DONE | HIGH | PASS | 8 tests PASS | `MarketTimestamp` Newtype bọc `DateTime<Utc>`, Invariant 2000-2100, timezone VN UTC+7, auto raw epoch, tích hợp `Trade`/`Quote` |
 | M3-T04 | Invalid data validation | NOT STARTED | CRITICAL | — | — | |
 | M3-T05 | Duplicate detection | NOT STARTED | HIGH | — | — | |
 | M3-T06 | Out-of-order event handling | NOT STARTED | HIGH | — | — | |
@@ -238,16 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M3-T03 — Timestamp normalization
-- Objective: Chuẩn hóa timestamp dữ liệu thị trường (milliseconds vs seconds, epoch conversion, xử lý múi giờ UTC vs ICT `Asia/Ho_Chi_Minh`, phát hiện timestamp trong tương lai hoặc quá cũ).
+- Task: M3-T04 — Invalid data validation
+- Objective: Xây dựng cơ chế phát hiện và xử lý dữ liệu thị trường không hợp lệ (giá âm/bằng 0, giá bất thường spike, volume bất thường, cross bid/ask spread) ở cả tầng Domain và Ingestion.
 - Expected Output:
-  1. Cấu trúc `TimestampNormalizer` hoặc hàm chuẩn hóa timestamp về UTC epoch milliseconds (`i64`).
-  2. Logic kiểm tra timestamp hợp lệ (chống timestamp âm, timestamp tương lai vượt ngưỡng lệch cho phép).
-  3. Hỗ trợ chuyển đổi hiển thị múi giờ Việt Nam (`Asia/Ho_Chi_Minh`).
+  1. Validator kiểm tra tính hợp lệ của Quote (bid < ask, không bị crossed market).
+  2. Bổ sung các quy tắc kiểm tra bất thường (sanity checks) cho dữ liệu thị trường.
+  3. Báo lỗi và ghi log cảnh báo chi tiết theo tiêu chuẩn của hệ thống.
 - Acceptance Criteria:
-  - [ ] Chuẩn hóa chính xác về UTC milliseconds.
-  - [ ] Phát hiện và báo lỗi timestamp bất thường (drift / future / negative).
-  - [ ] Unit tests đầy đủ các case timestamp.
+  - [ ] Phát hiện và từ chối các trường hợp giá/khối lượng/spread không hợp lệ.
+  - [ ] Đảm bảo không làm crash pipeline ingestion khi nhận dữ liệu rác từ broker.
+  - [ ] Bộ unit tests đầy đủ các trường hợp biên và dữ liệu lỗi.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -268,6 +268,7 @@
 | 2026-09-01 | Biased `tokio::select!` kết hợp Exponential Backoff State Machine trong `MarketConnectionManager` | Ưu tiên đọc dữ liệu socket trước định kỳ health check, tự phục hồi khi rớt mạng hoặc socket treo ngầm | Đảm bảo luồng stream tự phục hồi 24/7, chống spam kết nối và loại trừ zombie reader |
 | 2026-09-02 | Tách Normalized Domain Event (`Trade`/`Quote`/`MarketEvent`) vào `vn30_domain::market` và tách biệt khỏi DTO WebSocket | Tuân thủ Clean Architecture, tránh circular dependency và đảm bảo downstream crate không phụ thuộc transport layer | Dễ dàng tái sử dụng cho backtesting, CSV feed và mock testing |
 | 2026-09-04 | Tách biệt Symbol Identity Normalization và Tradability Lifecycle, dùng `SymbolMapper` cho Alias Resolution | Đảm bảo tính tái sử dụng cho Replay/Backtest, hỗ trợ dynamic alias (VN30F1M -> VN30F2409) và fail-fast chống symbol rác | Domain độc lập với broker quirks; Ingestion adapter kiểm soát alias tại biên mạng |
+| 2026-09-06 | Sử dụng Newtype Pattern `MarketTimestamp(DateTime<Utc>)` làm chuẩn và tích hợp trực tiếp vào `Trade`/`Quote` | Đảm bảo Invariant tại biên khởi tạo (Parse, don't validate), loại trừ nguy cơ timestamp rác/âm, hỗ trợ zero-cost conversion sang giờ VN (+07:00) | Toàn bộ downstream crates (Indicators, ML, Risk, Alert) được đảm bảo tính đúng đắn thời gian mà không cần kiểm tra lại |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -293,6 +294,7 @@
 | 2026-09-01 | M2-T06..M2-T08: Reconnect mechanism, Resubscribe & Exponential Backoff Policy | PASS | PASS | 6 unit tests PASS | `MarketConnectionManager`, `ReconnectPolicy`, `connect_and_handshake`, biased `select!` loop (36 tests trong crate) |
 | 2026-09-02 | M3-T01: Raw message → normalized event | PASS | PASS | 13 unit tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` (99 tests trong workspace) |
 | 2026-09-04 | M3-T02: Symbol mapping & Canonical Normalization | PASS | PASS | 12 unit tests PASS | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data (111 tests trong workspace) |
+| 2026-09-06 | M3-T03: Timestamp normalization & Domain Integration | PASS | PASS | 8 unit tests PASS | Struct `MarketTimestamp`, `from_raw_epoch`, tích hợp vào `Trade`/`Quote` và `parser.rs` (119 tests trong workspace) |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.
