@@ -6,10 +6,10 @@
 - Project: VN30 Real-Time Analyzer
 - Language: 100% Rust
 - Current Milestone: M3 — Data Normalization
-- Current Module: `crates/market-data` / `crates/domain`
-- Current Task: M3-T04 — Invalid data validation
-- Overall Progress: 31%
-- Last Updated: 2026-09-06 23:25
+- Current Module: `crates/market-data`
+- Current Task: M3-T06 — Out-of-order event handling
+- Overall Progress: 33%
+- Last Updated: 2026-09-17 19:26
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -36,7 +36,7 @@
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
-| M3 | Data Normalization | IN PROGRESS | 43% | IN PROGRESS | M3-T01..M3-T03 hoàn thành (33 tests PASS), chuẩn bị M3-T04 |
+| M3 | Data Normalization | IN PROGRESS | 71% | IN PROGRESS | M3-T01..M3-T05 hoàn thành (46 tests PASS), chuẩn bị M3-T06 |
 | M4 | State Management | NOT STARTED | 0% | — | |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
@@ -90,8 +90,8 @@
 | M3-T01 | Raw message → normalized event | DONE | CRITICAL | PASS | 13 tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` |
 | M3-T02 | Symbol mapping | DONE | HIGH | PASS | 12 tests PASS (6 domain + 6 market-data) | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data |
 | M3-T03 | Timestamp normalization | DONE | HIGH | PASS | 8 tests PASS | `MarketTimestamp` Newtype bọc `DateTime<Utc>`, Invariant 2000-2100, timezone VN UTC+7, auto raw epoch, tích hợp `Trade`/`Quote` |
-| M3-T04 | Invalid data validation | NOT STARTED | CRITICAL | — | — | |
-| M3-T05 | Duplicate detection | NOT STARTED | HIGH | — | — | |
+| M3-T04 | Invalid data validation | DONE | CRITICAL | PASS | 6 tests PASS (3 domain + 3 market-data) | Bắt chéo giá CrossedMarket, zero-quote, trần/sàn & lan truyền lỗi an toàn |
+| M3-T05 | Duplicate detection | DONE | HIGH | PASS | 6 tests PASS | `EventDeduplicator` với HashSet + VecDeque bounded ring buffer, chỉ dedup Quote & bảo lưu Trade |
 | M3-T06 | Out-of-order event handling | NOT STARTED | HIGH | — | — | |
 | M3-T07 | Stale data detection | NOT STARTED | HIGH | — | — | |
 
@@ -238,16 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M3-T04 — Invalid data validation
-- Objective: Xây dựng cơ chế phát hiện và xử lý dữ liệu thị trường không hợp lệ (giá âm/bằng 0, giá bất thường spike, volume bất thường, cross bid/ask spread) ở cả tầng Domain và Ingestion.
+- Task: M3-T06 — Out-of-order event handling
+- Objective: Xây dựng cơ chế phát hiện và xử lý các bản tin thị trường đến sai thứ tự thời gian (out-of-order events) dựa trên `MarketTimestamp`.
 - Expected Output:
-  1. Validator kiểm tra tính hợp lệ của Quote (bid < ask, không bị crossed market).
-  2. Bổ sung các quy tắc kiểm tra bất thường (sanity checks) cho dữ liệu thị trường.
-  3. Báo lỗi và ghi log cảnh báo chi tiết theo tiêu chuẩn của hệ thống.
+  1. Cơ chế Watermark / Tolerance window buffer để sắp xếp các sự kiện bị lệch thứ tự trong phạm vi cho phép.
+  2. Phân loại và xử lý các sự kiện đến quá trễ (late-arriving events).
+  3. Báo cáo metrics sự kiện out-of-order phục vụ Observability.
 - Acceptance Criteria:
-  - [ ] Phát hiện và từ chối các trường hợp giá/khối lượng/spread không hợp lệ.
-  - [ ] Đảm bảo không làm crash pipeline ingestion khi nhận dữ liệu rác từ broker.
-  - [ ] Bộ unit tests đầy đủ các trường hợp biên và dữ liệu lỗi.
+  - [ ] Bảo đảm tính đơn điệu tăng dần của timestamp cung cấp cho downstream engine.
+  - [ ] Bộ nhớ và độ trễ được giới hạn (Bounded latency & memory).
+  - [ ] Bộ unit tests đầy đủ cho in-order, out-of-order và late-arriving events.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -269,6 +269,8 @@
 | 2026-09-02 | Tách Normalized Domain Event (`Trade`/`Quote`/`MarketEvent`) vào `vn30_domain::market` và tách biệt khỏi DTO WebSocket | Tuân thủ Clean Architecture, tránh circular dependency và đảm bảo downstream crate không phụ thuộc transport layer | Dễ dàng tái sử dụng cho backtesting, CSV feed và mock testing |
 | 2026-09-04 | Tách biệt Symbol Identity Normalization và Tradability Lifecycle, dùng `SymbolMapper` cho Alias Resolution | Đảm bảo tính tái sử dụng cho Replay/Backtest, hỗ trợ dynamic alias (VN30F1M -> VN30F2409) và fail-fast chống symbol rác | Domain độc lập với broker quirks; Ingestion adapter kiểm soát alias tại biên mạng |
 | 2026-09-06 | Sử dụng Newtype Pattern `MarketTimestamp(DateTime<Utc>)` làm chuẩn và tích hợp trực tiếp vào `Trade`/`Quote` | Đảm bảo Invariant tại biên khởi tạo (Parse, don't validate), loại trừ nguy cơ timestamp rác/âm, hỗ trợ zero-cost conversion sang giờ VN (+07:00) | Toàn bộ downstream crates (Indicators, ML, Risk, Alert) được đảm bảo tính đúng đắn thời gian mà không cần kiểm tra lại |
+| 2026-09-10 | Nhận diện Crossed Market (`bid >= ask`) tại Invariant Domain & giữ nguyên lan truyền `Result` qua toán tử `?` | Bảo vệ tính toàn vẹn dữ liệu, hỗ trợ phân loại lỗi cho Observability/Metrics, caller match an toàn không sợ panic/crash | Phát hiện và ngăn chặn dữ liệu rác ngay tại Domain mà không làm gián đoạn luồng stream |
+| 2026-09-17 | Chỉ áp dụng Deduplication cho Quote, bảo lưu toàn vẹn Trade (không dedup Trade dựa trên price/vol) | Khớp lệnh thị trường có thể trùng giá và khối lượng liên tục trong cùng 1 giây; dedup Trade sẽ làm mất khối lượng thật (sai lệch Volume/VWAP) | Bảo vệ tính toàn vẹn dữ liệu khối lượng cho Indicator & Risk Engine, tối ưu thông lượng xử lý |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -293,8 +295,10 @@
 | 2026-08-30 | M2-T05: Connection health check | PASS | PASS | 6 unit tests PASS | `HealthMonitor`, AtomicU64 lock-free tracking, 4-tier health states (`Dead`, `Stale`, `HeartbeatMissed`, `Healthy`) |
 | 2026-09-01 | M2-T06..M2-T08: Reconnect mechanism, Resubscribe & Exponential Backoff Policy | PASS | PASS | 6 unit tests PASS | `MarketConnectionManager`, `ReconnectPolicy`, `connect_and_handshake`, biased `select!` loop (36 tests trong crate) |
 | 2026-09-02 | M3-T01: Raw message → normalized event | PASS | PASS | 13 unit tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` (99 tests trong workspace) |
-| 2026-09-04 | M3-T02: Symbol mapping & Canonical Normalization | PASS | PASS | 12 unit tests PASS | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data (111 tests trong workspace) |
+| 2026-09-04 | M3-T02: Symbol mapping & Canonical Normalization | PASS | PASS | 12 unit tests PASS | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data |
 | 2026-09-06 | M3-T03: Timestamp normalization & Domain Integration | PASS | PASS | 8 unit tests PASS | Struct `MarketTimestamp`, `from_raw_epoch`, tích hợp vào `Trade`/`Quote` và `parser.rs` (119 tests trong workspace) |
+| 2026-09-10 | M3-T04: Invalid data validation & Crossed Market Detection | PASS | PASS | 6 unit tests PASS | Thêm `CrossedMarket`, kiểm tra chéo giá `bid >= ask`, zero-quote, trần/sàn ở cả Domain và Ingestion (125 tests trong workspace) |
+| 2026-09-17 | M3-T05: Duplicate detection (Quote dedup & bounded LRU eviction) | PASS | PASS | 6 unit tests PASS | `EventDeduplicator` với HashSet + VecDeque bounded ring buffer (131 tests trong workspace) |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.

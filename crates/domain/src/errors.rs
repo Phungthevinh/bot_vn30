@@ -38,6 +38,8 @@ pub enum MarketDataError {
     InvalidVolume(String),
     #[error("Thời gian không hợp lệ: {0}")]
     InvalidTimestamp(String),
+    #[error("Thị trường bị chéo giá (Crossed Market) cho mã '{symbol}': bid {bid} >= ask {ask}")]
+    CrossedMarket { symbol: String, bid: f64, ask: f64 },
 }
 
 #[derive(Error, Debug)]

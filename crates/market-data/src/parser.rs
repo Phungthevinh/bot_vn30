@@ -104,6 +104,68 @@ impl MarketMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_try_into_market_event_quote_crossed_market_fails() {
+        let msg = MarketMessage::Quote(QuoteEvent {
+            symbol: "HPG".to_string(),
+            bid_price: 29000.0,
+            bid_vol: 100.0,
+            ask_price: 28500.0,
+            ask_vol: 100.0,
+            timestamp: 1724900000,
+        });
+
+        let result = msg.try_into_market_event();
+        assert!(matches!(
+            result,
+            Err(MarketDataError::CrossedMarket { symbol, bid, ask })
+                if symbol == "HPG" && bid == 29000.0 && ask == 28500.0
+        ));
+    }
+
+    #[test]
+    fn test_try_into_market_event_quote_both_zero_fails() {
+        let msg = MarketMessage::Quote(QuoteEvent {
+            symbol: "HPG".to_string(),
+            bid_price: 0.0,
+            bid_vol: 0.0,
+            ask_price: 0.0,
+            ask_vol: 0.0,
+            timestamp: 1724900000,
+        });
+
+        let result = msg.try_into_market_event();
+        assert!(matches!(result, Err(MarketDataError::InvalidPrice(_))));
+    }
+
+    #[test]
+    fn test_try_into_market_event_quote_ceiling_and_floor_success() {
+        // Kịch trần: trắng bên bán (ask_price = 0.0, ask_vol = 0.0)
+        let ceiling_msg = MarketMessage::Quote(QuoteEvent {
+            symbol: "HPG".to_string(),
+            bid_price: 30000.0,
+            bid_vol: 500.0,
+            ask_price: 0.0,
+            ask_vol: 0.0,
+            timestamp: 1724900000,
+        });
+        let ceiling_event = ceiling_msg.try_into_market_event();
+        assert!(ceiling_event.is_ok());
+        assert!(ceiling_event.unwrap().is_some());
+
+        // Kịch sàn: trắng bên mua (bid_price = 0.0, bid_vol = 0.0)
+        let floor_msg = MarketMessage::Quote(QuoteEvent {
+            symbol: "HPG".to_string(),
+            bid_price: 0.0,
+            bid_vol: 0.0,
+            ask_price: 26000.0,
+            ask_vol: 500.0,
+            timestamp: 1724900000,
+        });
+        let floor_event = floor_msg.try_into_market_event();
+        assert!(floor_event.is_ok());
+        assert!(floor_event.unwrap().is_some());
+    }
 
     #[test]
     fn test_parse_trade_event_success() {

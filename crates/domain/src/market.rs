@@ -92,6 +92,18 @@ impl Quote {
                 "ask_vol không hợp lệ".to_string(),
             ));
         }
+        if bid_price == 0.0 && ask_price == 0.0 {
+            return Err(MarketDataError::InvalidPrice(
+                "Cả bid_price và ask_price không thể đồng thời bằng 0".to_string(),
+            ));
+        }
+        if bid_price > 0.0 && ask_price > 0.0 && bid_price >= ask_price {
+            return Err(MarketDataError::CrossedMarket {
+                symbol: symbol.trim().to_uppercase(),
+                bid: bid_price,
+                ask: ask_price,
+            });
+        }
 
         Ok(Self {
             symbol: symbol.trim().to_uppercase(),
@@ -252,5 +264,76 @@ mod tests {
             MarketEvent::Quote(q) => assert_eq!(q, quote),
             _ => panic!("Expected Quote variant"),
         }
+    }
+
+    #[test]
+    fn test_quote_crossed_market() {
+        // Trường hợp 1: bid_price > ask_price
+        let err_crossed = Quote::new(
+            "HPG".to_string(),
+            29000.0,
+            100.0,
+            28500.0,
+            100.0,
+            dummy_ts(),
+        );
+        match err_crossed {
+            Err(MarketDataError::CrossedMarket { symbol, bid, ask }) => {
+                assert_eq!(symbol, "HPG");
+                assert_eq!(bid, 29000.0);
+                assert_eq!(ask, 28500.0);
+            }
+            other => panic!("Expected CrossedMarket error, got {:?}", other),
+        }
+
+        // Trường hợp 2: bid_price == ask_price khi cả hai > 0
+        let err_equal = Quote::new(
+            "HPG".to_string(),
+            28500.0,
+            100.0,
+            28550.0,
+            100.0,
+            dummy_ts(),
+        );
+        assert!(err_equal.is_ok());
+
+        let err_strictly_equal = Quote::new(
+            "HPG".to_string(),
+            28500.0,
+            100.0,
+            28500.0,
+            100.0,
+            dummy_ts(),
+        );
+        assert!(matches!(
+            err_strictly_equal,
+            Err(MarketDataError::CrossedMarket { .. })
+        ));
+    }
+
+    #[test]
+    fn test_quote_both_bid_and_ask_zero() {
+        let err_both_zero = Quote::new("HPG".to_string(), 0.0, 0.0, 0.0, 0.0, dummy_ts());
+        assert!(matches!(
+            err_both_zero,
+            Err(MarketDataError::InvalidPrice(_))
+        ));
+    }
+
+    #[test]
+    fn test_quote_ceiling_and_floor_validity() {
+        // Kịch trần: trắng bên bán (ask_price = 0.0, ask_vol = 0.0)
+        let quote_ceiling = Quote::new("HPG".to_string(), 30000.0, 500.0, 0.0, 0.0, dummy_ts());
+        assert!(quote_ceiling.is_ok());
+        let q_ceil = quote_ceiling.unwrap();
+        assert_eq!(q_ceil.bid_price, 30000.0);
+        assert_eq!(q_ceil.ask_price, 0.0);
+
+        // Kịch sàn: trắng bên mua (bid_price = 0.0, bid_vol = 0.0)
+        let quote_floor = Quote::new("HPG".to_string(), 0.0, 0.0, 26000.0, 500.0, dummy_ts());
+        assert!(quote_floor.is_ok());
+        let q_flr = quote_floor.unwrap();
+        assert_eq!(q_flr.bid_price, 0.0);
+        assert_eq!(q_flr.ask_price, 26000.0);
     }
 }
