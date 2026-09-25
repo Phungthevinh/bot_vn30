@@ -6,6 +6,7 @@ pub mod health;
 pub mod parser;
 pub mod reconnect;
 pub mod sequencer;
+pub mod stale;
 pub mod subscription;
 pub mod symbol_mapper;
 pub mod websocket;

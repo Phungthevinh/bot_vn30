@@ -1,0 +1,239 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug unit tests in library 'vn30_domain'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-domain"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'qa_domain_tests'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=qa_domain_tests",
+                    "--package=vn30-domain"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_market_data'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-market-data"
+                ]
+            }
+        },
+        {
+            "name": "Debug sequencer tests in 'vn30_market_data'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-market-data",
+                    "--",
+                    "sequencer::tests",
+                    "--nocapture"
+                ]
+            }
+        },
+        {
+            "name": "Debug example 'reproduce_bug_001'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--example=reproduce_bug_001",
+                    "--package=vn30-market-data"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "Debug unit tests in example 'reproduce_bug_001'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--example=reproduce_bug_001",
+                    "--package=vn30-market-data"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'qa_market_data_tests'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=qa_market_data_tests",
+                    "--package=vn30-market-data"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_state_store'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-state-store"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_indicators'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-indicators"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_features'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-features"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_ml'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-ml"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_risk'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-risk"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_signals'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-signals"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_alerts'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-alerts"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_telegram'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-telegram"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_storage'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-storage"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_scheduler'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-scheduler"
+                ]
+            }
+        },
+        {
+            "name": "Debug unit tests in library 'vn30_observability'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--package=vn30-observability"
+                ]
+            }
+        },
+        {
+            "name": "Debug executable 'vn30-analyzer'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=vn30-analyzer",
+                    "--package=vn30-app"
+                ]
+            },
+            "args": []
+        },
+        {
+            "name": "Debug unit tests in executable 'vn30-analyzer'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=vn30-analyzer",
+                    "--package=vn30-app"
+                ]
+            }
+        }
+    ]
+}

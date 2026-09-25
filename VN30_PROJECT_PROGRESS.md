@@ -5,11 +5,11 @@
 ## 1. PROJECT STATUS
 - Project: VN30 Real-Time Analyzer
 - Language: 100% Rust
-- Current Milestone: M3 — Data Normalization
-- Current Module: `crates/market-data`
-- Current Task: M3-T07 — Stale data detection
-- Overall Progress: 34%
-- Last Updated: 2026-09-25 10:25
+- Current Milestone: M4 — State Management
+- Current Module: `crates/state-store`
+- Current Task: M4-T01 — Latest market state
+- Overall Progress: 36%
+- Last Updated: 2026-09-25 23:00
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -36,8 +36,8 @@
 | M0 | Project Foundation | DONE | 100% | PASS | Khởi tạo workspace, 14 crates, .gitignore, config schema |
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
-| M3 | Data Normalization | IN PROGRESS | 86% | IN PROGRESS | M3-T01..M3-T06 hoàn thành (61 unit + 9 QA tests PASS), chuẩn bị M3-T07 |
-| M4 | State Management | NOT STARTED | 0% | — | |
+| M3 | Data Normalization | DONE | 100% | PASS | M3-T01..M3-T07 hoàn thành toàn bộ (67 unit + 9 QA tests PASS) |
+| M4 | State Management | NOT STARTED | 0% | — | Chuẩn bị triển khai M4-T01 |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
 | M7 | Feature Engineering | NOT STARTED | 0% | — | |
@@ -93,7 +93,7 @@
 | M3-T04 | Invalid data validation | DONE | CRITICAL | PASS | 6 tests PASS (3 domain + 3 market-data) | Bắt chéo giá CrossedMarket, zero-quote, trần/sàn & lan truyền lỗi an toàn |
 | M3-T05 | Duplicate detection | DONE | HIGH | PASS | 6 tests PASS | `EventDeduplicator` với HashSet + VecDeque bounded ring buffer, chỉ dedup Quote & bảo lưu Trade |
 | M3-T06 | Out-of-order event handling | DONE | HIGH | PASS | 4 unit tests PASS | `EventSequencer` với BTreeMap, Watermark dâng theo max(), FIFO eviction & flush_all |
-| M3-T07 | Stale data detection | NOT STARTED | HIGH | — | — | |
+| M3-T07 | Stale data detection | DONE | HIGH | PASS | 6 tests PASS | `StaleDataDetector` với Monotonic Clock `Instant`, 4 trạng thái `SymbolLiveness`, lọc rỗng & quét `get_stale_symbols` |
 
 ### M4 — STATE MANAGEMENT
 | ID | Task | Status | Priority | Review | Tests | Notes |
@@ -238,16 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M3-T07 — Stale data detection
-- Objective: Nhận diện và xử lý các bản tin thị trường quá hạn/ngưng cập nhật (stale data) dựa trên ngưỡng thời gian tối đa không có bản tin mới.
+- Task: M4-T01 — Latest market state
+- Objective: Thiết kế và lưu trữ trạng thái giá mới nhất (Latest Market State) cho toàn bộ rổ VN30 và phái sinh, phục vụ tra cứu nhanh O(1) thread-safe.
 - Expected Output:
-  1. `StaleDataDetector` theo dõi timestamp sự kiện gần nhất theo từng Symbol.
-  2. Bắn cảnh báo hoặc chuyển trạng thái sang `Stale` khi vượt ngưỡng heartbeat/inactivity threshold.
-  3. Báo cáo metrics dữ liệu đóng băng cho Observability.
+  1. `MarketStateStore` hoặc `LatestMarketState` lưu trữ giá bid/ask, trade, khối lượng mới nhất theo từng Symbol.
+  2. Hỗ trợ đọc/ghi đồng thời không gây lock contention nặng.
+  3. Cung cấp API snapshot trạng thái cho Downstream Modules.
 - Acceptance Criteria:
-  - [ ] Phát hiện chính xác trạng thái dữ liệu cũ/treo theo từng symbol.
-  - [ ] Tích hợp kiểm tra thời gian thực không block throughput.
-  - [ ] Bộ unit tests đầy đủ cho dữ liệu stale vs active.
+  - [ ] Cập nhật trạng thái tức thời từ `MarketEvent`.
+  - [ ] Tra cứu O(1) thread-safe.
+  - [ ] Unit tests đầy đủ cho cập nhật song song và snapshot.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -273,6 +273,7 @@
 | 2026-09-17 | Chỉ áp dụng Deduplication cho Quote, bảo lưu toàn vẹn Trade (không dedup Trade dựa trên price/vol) | Khớp lệnh thị trường có thể trùng giá và khối lượng liên tục trong cùng 1 giây; dedup Trade sẽ làm mất khối lượng thật (sai lệch Volume/VWAP) | Bảo vệ tính toàn vẹn dữ liệu khối lượng cho Indicator & Risk Engine, tối ưu thông lượng xử lý |
 | 2026-09-21 | Bổ sung `write_tx: Arc<RwLock<Option<Sender<Message>>>>` và helper `send_message()`, tự động phản hồi Ping/Pong và reset `attempt = 0` khi handshake thành công | Giải quyết triệt để BUG-001 (drop write stream, không gửi pong, tê liệt subscribe động) và BUG-002 (terminate sớm khi có `max_retries`) | Đảm bảo kết nối WebSocket 2 chiều ổn định 24/7, tự phản hồi Heartbeat và hỗ trợ đăng ký mã động |
 | 2026-09-25 | Cơ chế Bounded Watermark Sequencer (Unified ingest, FIFO capacity eviction & monotonic watermark clamp) | Đảm bảo tính đơn điệu tăng dần của timestamp downstream, giới hạn RAM (không OOM) và tự sắp xếp các sự kiện out-of-order | Bảo vệ toàn vẹn dữ liệu cho Indicator & Risk Engine, chống lỗi tính toán do thời gian bị giật lùi |
+| 2026-09-25 | Sử dụng Monotonic Clock `Instant` kết hợp `watched_symbols` và phân cấp 4 trạng thái `SymbolLiveness` trong `StaleDataDetector` | Tránh hoàn toàn lỗi Clock Skew / Integer Underflow khi đồng hồ bot lệch sàn, phân định rõ ràng mã mất feed (`Stale`) và mã chưa có tin (`NeverSeen`) | Đảm bảo an toàn tài chính, phát hiện chính xác mã chết/treo, cung cấp API bulk scan cho Observability |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -303,6 +304,7 @@
 | 2026-09-17 | M3-T05: Duplicate detection (Quote dedup & bounded LRU eviction) | PASS | PASS | 6 unit tests PASS | `EventDeduplicator` với HashSet + VecDeque bounded ring buffer (131 tests trong workspace) |
 | 2026-09-21 | Fix QA BUG-001 & BUG-002: Bi-directional WebSocket write stream & Clean Reconnect Lifecycle | PASS | PASS | 147 unit & QA tests PASS (workspace) | `MarketConnectionManager` write channel & retry reset |
 | 2026-09-25 | M3-T06: Out-of-order event handling (EventSequencer, Bounded Watermark & Latency Window) | PASS | PASS | 4 unit tests PASS (61 unit & 9 QA tests trong crate, workspace PASS) | Ingest, flush_ready, flush_all & eviction |
+| 2026-09-25 | M3-T07: Stale data detection (StaleDataDetector, Monotonic Instant, 4-tier SymbolLiveness & bulk scan) | PASS | PASS | 6 unit tests PASS (67 unit & 9 QA tests trong crate, workspace PASS) | Hoàn thành toàn bộ Milestone M3 |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.
