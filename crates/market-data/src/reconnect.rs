@@ -19,6 +19,7 @@ pub struct MarketConnectionManager {
     pub authenticator: Arc<dyn Authenticator>,
     pub current_epoch: AtomicU64,
     pub subscription_manager: Arc<tokio::sync::RwLock<SubscriptionManager>>,
+    pub write_tx: Arc<tokio::sync::RwLock<Option<mpsc::Sender<Message>>>>,
     pub state: Arc<tokio::sync::RwLock<ConnectionState>>,
     pub event_sender: mpsc::Sender<RawMarketMessage>,
     pub reconnect_policy: ReconnectPolicy,
@@ -70,6 +71,7 @@ impl MarketConnectionManager {
             event_sender,
             reconnect_policy,
             health_monitor,
+            write_tx: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -81,6 +83,8 @@ impl MarketConnectionManager {
             .map_err(|e| MarketDataError::ConnectionError(e.to_string()))?;
 
         let (mut ws_write, mut ws_read) = ws_stream.split();
+
+        let (tx, mut rx) = mpsc::channel::<Message>(1024);
 
         *self.state.write().await = ConnectionState::Connecting;
 
@@ -126,6 +130,18 @@ impl MarketConnectionManager {
             .as_millis() as u64;
         self.health_monitor.record_message(now_ms);
 
+        *self.write_tx.write().await = Some(tx.clone());
+        tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                if let Err(e) = ws_write.send(msg).await {
+                    tracing::error!("Failed to send message: {}", e);
+                    break;
+                }
+            }
+
+            let _ = ws_write.close().await;
+        });
+
         Ok(ws_read)
     }
 
@@ -154,6 +170,7 @@ impl MarketConnectionManager {
             match connect_future.await {
                 Ok(mut ws_read) => {
                     *self.state.write().await = ConnectionState::Connected;
+                    attempt = 0;
                     loop {
                         tokio::select! {
                             biased;
@@ -169,6 +186,14 @@ impl MarketConnectionManager {
                                             .send(RawMarketMessage::Text(text.to_string()))
                                             .await
                                             .unwrap_or_default();
+                                        if text.contains("\"type\":\"ping\"") {
+                                            let pong = serde_json::json!({"type": "pong"}).to_string();
+                                            let _ = self.send_message(Message::Text(pong.into())).await;
+                                        }
+                                    }
+                                    Some(Ok(Message::Ping(payload))) => {
+                                        tracing::debug!("Nhận WebSocket Ping từ sàn, gửi Pong phản hồi");
+                                        let _ = self.send_message(Message::Pong(payload)).await;
                                     }
                                     Some(Ok(Message::Close(close_frame))) => {
                                         tracing::warn!("WebSocket server closed the connection: {:?}", close_frame);
@@ -208,7 +233,7 @@ impl MarketConnectionManager {
                         }
                     }
                     *self.state.write().await = ConnectionState::Disconnected;
-                    attempt = 1;
+                    *self.write_tx.write().await = None;
                 }
                 Err(e) => {
                     tracing::error!("Lỗi khi kết nối: {}", e);
@@ -216,6 +241,20 @@ impl MarketConnectionManager {
                     continue;
                 }
             }
+        }
+    }
+
+    pub async fn send_message(&self, message: Message) -> Result<(), MarketDataError> {
+        let guard = self.write_tx.read().await;
+        if let Some(ws_write) = guard.as_ref() {
+            ws_write
+                .send(message)
+                .await
+                .map_err(|e| MarketDataError::ConnectionError(e.to_string()))
+        } else {
+            Err(MarketDataError::ConnectionError(
+                "No active connection".to_string(),
+            ))
         }
     }
 }
@@ -273,10 +312,7 @@ mod tests {
             policy,
         );
 
-        assert_eq!(
-            *manager.state.read().await,
-            ConnectionState::Disconnected
-        );
+        assert_eq!(*manager.state.read().await, ConnectionState::Disconnected);
         assert_eq!(manager.current_epoch.load(Ordering::Relaxed), 0);
     }
 

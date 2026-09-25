@@ -167,8 +167,8 @@ async fn test_qa_reconnect_manager_premature_termination_on_max_retries() {
     let result = tokio::time::timeout(Duration::from_millis(500), manager_task).await;
     println!("Manager task finished: {:?}", result.is_ok());
     assert!(
-        result.is_ok(),
-        "CONFIRMED BUG: MarketConnectionManager terminated permanently because attempt was set to 1 after first clean disconnect, matching max_retries = Some(1)!"
+        result.is_err(),
+        "MarketConnectionManager should NOT terminate immediately on first clean disconnect; it must attempt reconnection"
     );
 
     server_handle.abort();

@@ -57,8 +57,8 @@
 
 | ID | Module | Title | Severity | Status | Reproducibility |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BUG-001** | `market-data::reconnect` | Split write stream bị drop dẫn đến không phản hồi WebSocket Ping và tê liệt subscribe động | **CRITICAL** | Open | Always |
-| **BUG-002** | `market-data::reconnect` | Vòng lặp Reconnect bị terminate vĩnh viễn sau lần ngắt kết nối đầu tiên khi cấu hình `max_retries` | **CRITICAL** | Open | Always |
+| **BUG-001** | `market-data::reconnect` | Split write stream bị drop dẫn đến không phản hồi WebSocket Ping và tê liệt subscribe động | **CRITICAL** | Resolved | Always |
+| **BUG-002** | `market-data::reconnect` | Vòng lặp Reconnect bị terminate vĩnh viễn sau lần ngắt kết nối đầu tiên khi cấu hình `max_retries` | **CRITICAL** | Resolved | Always |
 | **BUG-003** | `domain::market` & `timestamp` | Domain Invariants (`MarketTimestamp`, `Trade`, `Quote`) bị bypass hoàn toàn khi deserialize qua Serde | **HIGH** | Open | Always |
 | **BUG-004** | `domain::market` | `Quote::new` cho phép tạo Quote có giá bằng 0 nhưng khối lượng dương (bán cổ phiếu giá 0đ) | **HIGH** | Open | Always |
 | **BUG-005** | `domain::config` | `RiskLevelConfig::validate` bỏ qua kiểm tra `beta_min` khi `beta_max` là None, chấp nhận NaN/âm | **HIGH** | Open | Always |
@@ -81,7 +81,7 @@
 **Reason:**
 Lỗi này xảy ra trực tiếp trên critical path của luồng ingestion dữ liệu thời gian thực. Việc drop `ws_write` khiến client hoàn toàn không có khả năng gửi Pong khi sàn gửi Ping, dẫn đến việc sàn WebSocket ngắt kết nối cưỡng bức (forced timeout disconnect) sau 10–30 giây. Đồng thời, toàn bộ chức năng đăng ký/hủy mã động (`subscribe`/`unsubscribe`) trong suốt phiên giao dịch bị tê liệt hoàn toàn.
 
-**Status:** Open
+**Status:** Resolved
 
 **Module:** `crates/market-data/src/reconnect.rs`
 
@@ -162,7 +162,7 @@ Kiến trúc tách `split()` không lưu trữ `ws_write` trong `MarketConnectio
 **Reason:**
 Lỗi này phá vỡ cơ chế tự phục hồi (Self-Healing) của hệ thống. Khi một kết nối đang hoạt động ổn định hàng giờ bị ngắt kết nối mạng thông thường, thay vì reset số lần thử và tiếp tục kết nối lại, hệ thống lại đánh dấu `attempt = 1` và so sánh trực tiếp với `max_retries = Some(1)`, dẫn đến vòng lặp thoát và bot dừng hoạt động hoàn toàn.
 
-**Status:** Open
+**Status:** Resolved
 
 **Module:** `crates/market-data/src/reconnect.rs`
 

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, FixedOffset, Utc};
+use chrono::{DateTime, Datelike, Duration, FixedOffset, Utc};
 
 use crate::errors::MarketDataError;
 use serde::{Deserialize, Serialize};
@@ -68,6 +68,24 @@ impl MarketTimestamp {
             return Self::from_epoch_secs(epoch);
         } else {
             return Self::from_epoch_millis(epoch);
+        }
+    }
+
+    // hàm tính toán watermark từ timestamp
+    // watermark là thời điểm bắt đầu tính toán dữ liệu
+    // bằng cách trừ đi khoảng thời gian cho phép
+    pub fn checked_sub_duration(
+        &self,
+        duration: std::time::Duration,
+    ) -> Result<Self, MarketDataError> {
+        let new_time = Duration::from_std(duration)
+            .map_err(|e| MarketDataError::InvalidTimestamp(e.to_string()))?;
+        if let Some(new_dt) = self.date_time.checked_sub_signed(new_time) {
+            return Self::from_utc(new_dt);
+        } else {
+            return Err(MarketDataError::InvalidTimestamp(
+                "Invalid timestamp".to_string(),
+            ));
         }
     }
 }
@@ -152,5 +170,29 @@ mod tests {
             serde_json::from_str(&json).expect("deserialize should succeed");
 
         assert_eq!(ts, deserialized);
+    }
+
+    #[test]
+    fn test_checked_sub_duration_success() {
+        let base_ms = 1_725_530_400_000; // 2024-09-05T10:00:00Z
+        let ts = MarketTimestamp::from_epoch_millis(base_ms).unwrap();
+
+        let sub_dur = std::time::Duration::from_millis(2500);
+        let result = ts.checked_sub_duration(sub_dur).expect("should succeed");
+
+        assert_eq!(result.timestamp_millis(), base_ms - 2500);
+        assert_eq!(result.timestamp_secs(), (base_ms - 2500) / 1000);
+    }
+
+    #[test]
+    fn test_checked_sub_duration_underflow() {
+        let base_ms = 1_725_530_400_000;
+        let ts = MarketTimestamp::from_epoch_millis(base_ms).unwrap();
+
+        // 30 years in seconds -> brings timestamp before year 2000
+        let thirty_years = std::time::Duration::from_secs(30 * 365 * 24 * 3600);
+        let result = ts.checked_sub_duration(thirty_years);
+
+        assert!(result.is_err());
     }
 }

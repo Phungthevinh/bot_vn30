@@ -27,6 +27,15 @@ pub enum MarketEvent {
     Quote(Quote),
 }
 
+impl MarketEvent {
+    pub fn timestamp(&self) -> MarketTimestamp {
+        match self {
+            MarketEvent::Trade(trade) => trade.timestamp,
+            MarketEvent::Quote(quote) => quote.timestamp,
+        }
+    }
+}
+
 impl Trade {
     pub fn new(
         symbol: String,
