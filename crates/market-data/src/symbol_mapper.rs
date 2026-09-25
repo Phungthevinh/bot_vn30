@@ -56,9 +56,9 @@ impl SymbolMapper {
         let raw = raw.trim().to_uppercase();
 
         if let Some(target_symbol) = self.aliases.get(&raw) {
-            Instrument::parse_canonical(target_symbol)
+            return Instrument::parse_canonical(target_symbol);
         } else {
-            Instrument::parse_canonical(&raw)
+            return Instrument::parse_canonical(&raw);
         }
     }
 
@@ -121,10 +121,7 @@ mod tests {
 
         let inst_lower = mapper.map("vn30f2512").unwrap();
         assert_eq!(inst_lower.as_str(), "VN30F2512");
-        assert_eq!(
-            mapper.map_to_canonical("VN30F2409").unwrap(),
-            "VN30F2409"
-        );
+        assert_eq!(mapper.map_to_canonical("VN30F2409").unwrap(), "VN30F2409");
     }
 
     #[test]
@@ -143,10 +140,7 @@ mod tests {
         assert_eq!(inst_case.as_str(), "VN30F2409");
 
         // Map alias thứ 2 qua helper string
-        assert_eq!(
-            mapper.map_to_canonical("vn30f2m").unwrap(),
-            "VN30F2410"
-        );
+        assert_eq!(mapper.map_to_canonical("vn30f2m").unwrap(), "VN30F2410");
     }
 
     #[test]
