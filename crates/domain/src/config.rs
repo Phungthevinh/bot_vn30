@@ -4,88 +4,151 @@ use serde::{Deserialize, Serialize};
 use std::convert::AsRef;
 use std::path::Path;
 
+/// Cấu hình tổng thể của ứng dụng VN30 Real-Time Analyzer.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppConfig {
+    /// Cấu hình máy chủ và mức độ ghi log.
     pub server: ServerConfig,
+    /// Cấu hình kết nối dữ liệu thị trường (WebSocket).
     pub market_data: MarketDataConfig,
+    /// Cấu hình danh mục rổ cổ phiếu cần theo dõi (rổ VN30).
     pub basket: BasketConfig,
+    /// Cấu hình bộ lưu trữ trạng thái trong bộ nhớ.
     pub state_store: StateStoreConfig,
+    /// Cấu hình trích xuất đặc trưng và tính toán chỉ báo.
     pub features: FeaturesConfig,
+    /// Cấu hình mô hình Machine Learning.
     pub model: ModelConfig,
+    /// Cấu hình các hồ sơ quản trị rủi ro (safe, medium, risky).
     pub risk: RiskProfilesConfig,
+    /// Cấu hình hệ thống cảnh báo qua Telegram bot.
     pub telegram: TelegramConfig,
 }
 
+/// Cấu hình máy chủ runtime và môi trường vận hành.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ServerConfig {
+    /// Môi trường vận hành (`"development"`, `"production"`, `"test"`).
     pub environment: String,
+    /// Cấp độ ghi nhật ký (`"info"`, `"debug"`, `"error"`, `"warn"`, `"trace"`).
     pub log_level: String,
 }
 
+/// Cấu hình kết nối dữ liệu thị trường trực tiếp qua WebSocket.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MarketDataConfig {
+    /// Định danh nhà cung cấp dữ liệu (`"SSI_FASTCONNECT"`, `"VNDIRECT"`, `"VPS"`, `"SIMULATOR"`).
     pub provider: String,
+    /// Địa chỉ endpoint WebSocket của nhà cung cấp (bắt đầu bằng `ws://` hoặc `wss://`).
     pub ws_endpoint: String,
+    /// Thời gian chờ khởi đầu khi tái kết nối (mili-giây).
     pub reconnect_initial_backoff_ms: u64,
+    /// Thời gian chờ tối đa (trần trễ) khi tái kết nối (mili-giây).
     pub reconnect_max_backoff_ms: u64,
+    /// Chu kỳ gửi/nhận nhịp tim duy trì kết nối (giây).
     pub heartbeat_interval_secs: u64,
+    /// Ngưỡng thời gian tối đa không có bản tin mới trước khi coi là mất kết nối (giây).
     pub max_tick_staleness_secs: u64,
 }
 
+/// Cấu hình danh mục rổ mã cổ phiếu cần theo dõi và phân tích thời gian thực.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BasketConfig {
+    /// Thời điểm đồng bộ danh mục hàng ngày theo định dạng `HH:MM:SS` (ví dụ: `"08:00:00"`).
     pub sync_time: String,
+    /// Danh sách các mã chứng khoán cần theo dõi (ví dụ: 30 mã rổ VN30).
     pub symbols: Vec<String>,
 }
 
+/// Cấu hình bộ nhớ lưu trữ trạng thái rolling-window trong RAM.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StateStoreConfig {
+    /// Kích thước cửa sổ trượt tối đa (số lượng nến hoặc sự kiện tối đa lưu trữ).
     pub rolling_window_size: u64,
 }
 
+/// Cấu hình kỹ thuật trích xuất đặc trưng phục vụ Machine Learning và Risk Engine.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FeaturesConfig {
+    /// Số lượng thanh nến lookback để tính hệ số Beta thị trường.
     pub beta_lookback_bars: u64,
+    /// Số lượng mẫu hợp lệ tối thiểu cần có trước khi tính toán đặc trưng.
     pub min_valid_samples: u64,
 }
 
+/// Cấu hình mô hình Machine Learning (Random Forest) và lịch huấn luyện lại.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelConfig {
+    /// Đường dẫn tới file artifact nhị phân của mô hình (ví dụ: `"models/rf_active.bin"`).
     pub artifact_path: String,
+    /// Lịch trình huấn luyện lại mô hình định kỳ (ví dụ: `"sunday"`).
     pub retrain_schedule: String,
+    /// Điểm tin cậy dự báo tối thiểu (trong đoạn `[0.0, 1.0]`) để kích hoạt tín hiệu giao dịch.
     pub min_confidence_score: f32,
 }
 
+/// Cấu hình các tham số rủi ro cho một phân hạng hồ sơ cụ thể.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RiskLevelConfig {
+    /// Biên lợi nhuận mục tiêu tối thiểu (Take Profit Min).
     pub target_min: f32,
+    /// Biên lợi nhuận mục tiêu tối đa (Take Profit Max).
     pub target_max: f32,
+    /// Tỷ lệ cắt lỗ tối thiểu (Stop Loss Min, giá trị âm hoặc 0).
     pub sl_min: f32,
+    /// Tỷ lệ cắt lỗ tối đa (Stop Loss Max, giá trị âm hoặc 0).
     pub sl_max: f32,
+    /// Ngưỡng hệ số Beta tối thiểu cho phép (tùy chọn).
     pub beta_min: Option<f64>,
+    /// Ngưỡng hệ số Beta tối đa cho phép (tùy chọn).
     pub beta_max: Option<f64>,
 }
 
+/// Cấu hình phân tầng rủi ro gồm 3 mức: An toàn, Trung bình, và Mạo hiểm.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RiskProfilesConfig {
+    /// Hồ sơ rủi ro thấp / an toàn (Safe).
     pub safe: RiskLevelConfig,
+    /// Hồ sơ rủi ro trung bình (Medium).
     pub medium: RiskLevelConfig,
+    /// Hồ sơ rủi ro cao / mạo hiểm (Risky).
     pub risky: RiskLevelConfig,
 }
 
+/// Cấu hình kết nối và tần suất phát cảnh báo tới Telegram Bot.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TelegramConfig {
+    /// Tên biến môi trường lưu Token bí mật của Telegram Bot (ví dụ: `"TELEGRAM_BOT_TOKEN"`).
     pub bot_token_env: String,
+    /// Danh sách các Chat ID được phép nhận thông báo cảnh báo.
     pub chat_allowlist: Vec<i64>,
+    /// Thời gian chờ hạ nhiệt (cooldown/debounce) giữa các cảnh báo cho cùng một mã (phút).
     pub debounce_cooldown_mins: u64,
 }
 
 impl AppConfig {
+    /// Phân tích cú pháp chuỗi văn bản định dạng TOML thành đối tượng [`AppConfig`].
+    ///
+    /// # Tham số:
+    /// - `content`: Chuỗi nội dung TOML cần giải tuần tự hóa.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(Self)`: Cấu hình ứng dụng được nạp thành công.
+    /// - `Err(ConfigError::ParseError)`: Nếu cú pháp TOML bị sai hoặc thiếu trường dữ liệu bắt buộc.
     pub fn from_str(content: &str) -> Result<Self, ConfigError> {
         let config: Self = toml::from_str(content)?;
         Ok(config)
     }
 
+    /// Đọc file cấu hình từ đường dẫn đĩa và giải tuần tự hóa thành [`AppConfig`].
+    ///
+    /// # Tham số:
+    /// - `path`: Đường dẫn tới file cấu hình TOML (ví dụ: `"config/default.toml"`).
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(Self)`: Cấu hình ứng dụng nạp thành công.
+    /// - `Err(ConfigError::IoError)`: Nếu không tìm thấy file hoặc không có quyền đọc.
+    /// - `Err(ConfigError::ParseError)`: Nếu nội dung file sai định dạng TOML.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(&path).map_err(|source| ConfigError::IoError {
             path: path.as_ref().display().to_string(),
@@ -95,6 +158,13 @@ impl AppConfig {
         Self::from_str(&content)
     }
 
+    /// Thẩm định toàn diện (deep validation) tính hợp lệ logic của toàn bộ các mục cấu hình con.
+    ///
+    /// Kiểm tra tuần tự theo chuỗi: Server -> MarketData -> Basket -> StateStore -> Features -> Model -> Risk -> Telegram.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(())`: Mọi tham số cấu hình đều thỏa mãn các ràng buộc logic.
+    /// - `Err(ConfigError::ValidationError)`: Nếu phát hiện bất kỳ giá trị cấu hình nào vi phạm quy tắc.
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.server.validate()?;
         self.market_data.validate()?;
@@ -109,6 +179,14 @@ impl AppConfig {
 }
 
 impl ServerConfig {
+    /// Thẩm định cấu hình máy chủ và môi trường runtime.
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `environment`: Chỉ chấp nhận một trong các giá trị: `"development"`, `"production"`, `"test"`.
+    /// - `log_level`: Chỉ chấp nhận một trong các mức: `"info"`, `"debug"`, `"error"`, `"warn"`, `"trace"`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu môi trường hoặc cấp độ log không hợp lệ.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra environment, log_level
         match self.environment.as_str() {
@@ -132,6 +210,17 @@ impl ServerConfig {
 }
 
 impl MarketDataConfig {
+    /// Thẩm định cấu hình kết nối luồng dữ liệu thị trường (WebSocket).
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `provider`: Phải thuộc danh sách nhà cung cấp hỗ trợ: `"SSI_FASTCONNECT"`, `"VNDIRECT"`, `"VPS"`, `"SIMULATOR"`.
+    /// - `ws_endpoint`: Không được rỗng và phải bắt đầu bằng giao thức `"ws://"` hoặc `"wss://"`.
+    /// - `reconnect_initial_backoff_ms`: Phải lớn hơn 0.
+    /// - `reconnect_max_backoff_ms`: Phải lớn hơn hoặc bằng `reconnect_initial_backoff_ms`.
+    /// - `heartbeat_interval_secs` và `max_tick_staleness_secs`: Phải lớn hơn 0.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu bất kỳ thông số kết nối nào vi phạm ràng buộc.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra provider, ws_endpoint, backoff, heartbeat (lưu ý: u64 == 0)
 
@@ -203,6 +292,15 @@ impl MarketDataConfig {
 }
 
 impl BasketConfig {
+    /// Thẩm định cấu hình danh mục rổ cổ phiếu cần theo dõi (ví dụ: rổ VN30).
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `symbols`: Danh sách không được rỗng và không chứa phần tử rỗng / khoảng trắng.
+    /// - Các mã cổ phiếu trong danh sách không được trùng lặp.
+    /// - `sync_time`: Thời điểm đồng bộ định kỳ hàng ngày phải đúng định dạng giờ:phút:giây (`"%H:%M:%S"`).
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu danh sách mã rỗng, chứa mã trùng lặp, hoặc sai format thời gian.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra symbols.is_empty(), symbol rỗng, duplicate symbol, sync_time format
         if self.symbols.is_empty() {
@@ -242,6 +340,13 @@ impl BasketConfig {
 }
 
 impl StateStoreConfig {
+    /// Thẩm định cấu hình bộ lưu trữ trạng thái trong bộ nhớ (State Store).
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `rolling_window_size`: Kích thước cửa sổ trượt (số lượng nến/sự kiện tối đa lưu trong RAM) phải lớn hơn 0.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu `rolling_window_size == 0`.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra rolling_window_size == 0
         match self.rolling_window_size {
@@ -257,6 +362,15 @@ impl StateStoreConfig {
 }
 
 impl FeaturesConfig {
+    /// Thẩm định cấu hình kỹ thuật trích xuất đặc trưng phục vụ Machine Learning và Risk.
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `beta_lookback_bars`: Số lượng nến hồi quy tính Beta thị trường phải lớn hơn 0.
+    /// - `min_valid_samples`: Số mẫu hợp lệ tối thiểu để tính toán chỉ báo/đặc trưng phải lớn hơn 0.
+    /// - `min_valid_samples` không được lớn hơn `beta_lookback_bars`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu các thông số bằng 0 hoặc `min_valid_samples > beta_lookback_bars`.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra beta_lookback_bars, min_valid_samples
         match self.beta_lookback_bars {
@@ -286,6 +400,15 @@ impl FeaturesConfig {
 }
 
 impl ModelConfig {
+    /// Thẩm định cấu hình mô hình Machine Learning (Random Forest).
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `artifact_path`: Đường dẫn lưu file mô hình nhị phân không được để trống.
+    /// - `retrain_schedule`: Chu kỳ huấn luyện lại (ví dụ cron hoặc ngày trong tuần) không được để trống.
+    /// - `min_confidence_score`: Ngưỡng độ tin cậy tối thiểu để kích hoạt tín hiệu phải nằm trong đoạn `[0.0, 1.0]`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu đường dẫn trống hoặc độ tin cậy nằm ngoài đoạn `[0.0, 1.0]`.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra artifact_path, retrain_schedule, min_confidence_score [0.0, 1.0]
         match self.artifact_path.trim().is_empty() {
@@ -317,6 +440,15 @@ impl ModelConfig {
 }
 
 impl RiskLevelConfig {
+    /// Thẩm định thông số phân bổ rủi ro và ngưỡng Take-Profit / Stop-Loss.
+    ///
+    /// # Quy tắc thẩm định:
+    /// - Lợi nhuận mục tiêu (Take Profit): `target_min > 0.0` và `target_max >= target_min`.
+    /// - Giới hạn cắt lỗ (Stop Loss): Phải là số âm/bằng 0, tức `sl_min <= sl_max <= 0.0`.
+    /// - Ngưỡng hệ số Beta: Nếu đồng thời có cả `beta_min` và `beta_max` thì bắt buộc `beta_min <= beta_max`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu vi phạm bất kỳ bất biến kinh tế/tài chính nào nói trên.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra:
         // - target_min > 0.0 && target_max >= target_min
@@ -355,6 +487,10 @@ impl RiskLevelConfig {
 }
 
 impl RiskProfilesConfig {
+    /// Thẩm định đồng thời cả 3 hồ sơ rủi ro: An toàn (`safe`), Trung bình (`medium`), Mạo hiểm (`risky`).
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu một trong ba hồ sơ cấu hình bị lỗi.
     pub fn validate(&self) -> Result<(), ConfigError> {
         self.safe.validate()?;
         self.medium.validate()?;
@@ -364,6 +500,13 @@ impl RiskProfilesConfig {
 }
 
 impl TelegramConfig {
+    /// Thẩm định cấu hình cảnh báo Telegram.
+    ///
+    /// # Quy tắc thẩm định:
+    /// - `bot_token_env`: Tên biến môi trường lưu token không được để trống hoặc chỉ chứa khoảng trắng.
+    ///
+    /// # Lỗi trả về:
+    /// - [`ConfigError::ValidationError`]: Nếu tên biến môi trường bị rỗng.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Kiểm tra bot_token_env
         match self.bot_token_env.trim().is_empty() {
@@ -379,6 +522,13 @@ impl TelegramConfig {
 }
 
 impl TelegramConfig {
+    /// Đọc và lấy giá trị Token Telegram Bot từ biến môi trường hệ thống.
+    ///
+    /// Tên biến môi trường được chỉ định tại trường `bot_token_env` (ví dụ: `"TELEGRAM_BOT_TOKEN"`).
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(String)`: Chuỗi bí mật token hợp lệ đã bóc tách từ môi trường.
+    /// - `Err(ConfigError::MissingEnvVar)`: Nếu biến môi trường chưa được thiết lập hoặc có giá trị rỗng.
     pub fn load_bot_token(&self) -> Result<String, ConfigError> {
         let bot_token_env = std::env::var(&self.bot_token_env)
             .map_err(|_| ConfigError::MissingEnvVar(self.bot_token_env.clone().to_string()))?;

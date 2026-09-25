@@ -4,16 +4,21 @@ use std::time::{Duration, Instant};
 
 use vn30_domain::market::MarketEvent;
 
+/// Bộ phát hiện dữ liệu thị trường bị đóng băng hoặc quá hạn (Stale Data Detector) cho từng mã chứng khoán.
+///
+/// Sử dụng đồng hồ đơn điệu (`Instant`) để tính toán khoảng thời gian trôi qua kể từ lần cập nhật gần nhất,
+/// tránh bị ảnh hưởng bởi hiện tượng nhảy ngược giờ hệ thống (NTP clock drift).
 #[derive(Debug)]
 pub struct StaleDataDetector {
     /// Ngưỡng thời gian tối đa cho phép không có bản tin mới trước khi bị coi là `Stale`.
     threshold: Duration,
-    /// Thời điểm cập nhật gần nhất
+    /// Thời điểm cập nhật gần nhất của từng mã
     last_update: HashMap<String, Instant>,
-    /// Danh sách các mã cần monitor
+    /// Danh sách các mã cổ phiếu trong rổ cần theo dõi (ví dụ: rổ VN30)
     watched_symbols: HashSet<String>,
 }
 
+/// Trạng thái sống/chết (Liveness) của một mã chứng khoán trong luồng phân tích thời gian thực.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SymbolLiveness {
     /// Đang nhận dữ liệu bình thường trong hạn threshold

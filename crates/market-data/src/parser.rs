@@ -4,54 +4,84 @@ use vn30_domain::errors::MarketDataError;
 use vn30_domain::market::{MarketEvent, Quote, Trade};
 use vn30_domain::timestamp::MarketTimestamp;
 
-// 1. Các struct sự kiện chi tiết
+/// Sự kiện khớp lệnh thô (Trade Event) được giải tuần tự hóa từ gói tin JSON của sàn giao dịch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TradeEvent {
+    /// Mã chứng khoán nhận được từ sàn (ví dụ: `"HPG"`, `"VN30F2409"`).
     pub symbol: String,
+    /// Mức giá khớp lệnh thực tế.
     pub price: f64,
+    /// Khối lượng khớp lệnh thực tế.
     pub volume: f64,
+    /// Mốc thời gian phát sinh giao dịch dạng số nguyên epoch thô (giây hoặc mili-giây).
     pub timestamp: i64,
 }
 
+/// Sự kiện cập nhật giá chào mua và chào bán tốt nhất (BBO Quote Event) từ sàn giao dịch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuoteEvent {
+    /// Mã chứng khoán nhận được từ sàn.
     pub symbol: String,
+    /// Mức giá đặt mua cao nhất (Best Bid Price).
     pub bid_price: f64,
+    /// Khối lượng đặt mua tương ứng.
     pub bid_vol: f64,
+    /// Mức giá đặt bán thấp nhất (Best Ask Price).
     pub ask_price: f64,
+    /// Khối lượng đặt bán tương ứng.
     pub ask_vol: f64,
+    /// Mốc thời gian cập nhật sổ lệnh dạng số nguyên epoch thô.
     pub timestamp: i64,
 }
 
+/// Sự kiện nhịp tim định kỳ (Heartbeat Event) do máy chủ sàn gửi về để giữ kết nối sống.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HeartbeatEvent {
+    /// Mốc thời gian của tín hiệu Heartbeat dạng số nguyên epoch thô.
     pub timestamp: i64,
 }
 
+/// Sự kiện thông báo lỗi phát sinh từ phía sàn giao dịch (Exchange Error Event).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExchangeErrorEvent {
+    /// Mã định danh lỗi từ sàn (ví dụ: `"AUTH_FAILED"`, `"RATE_LIMIT"`).
     pub code: String,
+    /// Thông điệp chi tiết mô tả nguyên nhân lỗi do sàn trả về.
     pub message: String,
 }
 
-// 2. Enum đại diện cho tất cả các loại bản tin đã parse
+/// Enum đóng gói toàn bộ các loại bản tin thị trường sau khi phân tích cú pháp từ stream.
+///
+/// Phân loại dựa trên trường `"type"` trong payload JSON (`snake_case`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MarketMessage {
+    /// Bản tin giao dịch khớp lệnh thực tế.
     Trade(TradeEvent),
+    /// Bản tin cập nhật giá chào mua / chào bán tốt nhất.
     Quote(QuoteEvent),
+    /// Bản tin nhịp tim giữ kết nối (Heartbeat / Keep-alive).
     Heartbeat(HeartbeatEvent),
+    /// Bản tin cảnh báo lỗi từ sàn giao dịch (hỗ trợ cả tag `"error"` và alias `"exchange_error"`).
     #[serde(alias = "exchange_error", rename = "error")]
     ExchangeError(ExchangeErrorEvent),
+    /// Bản tin Pong phản hồi cho các frame Ping ở tầng giao thức WebSocket.
     #[serde(skip)]
     Pong(Vec<u8>),
 }
 
-// 3. Struct Parser với các hàm parse chính
+/// Bộ phân tích cú pháp dữ liệu thị trường (Parser) chịu trách nhiệm giải mã các frame thô từ sàn.
 pub struct MarketDataParser;
 
 impl MarketDataParser {
-    /// Parse trực tiếp từ RawMarketMessage
+    /// Phân tích trực tiếp từ bản tin thô [`RawMarketMessage`] thành [`MarketMessage`].
+    ///
+    /// # Tham số:
+    /// - `raw`: Tham chiếu tới bản tin WebSocket thô vừa nhận được.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(MarketMessage)`: Bản tin thị trường đã được bóc tách định dạng.
+    /// - `Err(MarketDataError::ParseError)`: Nếu frame ở định dạng nhị phân không hỗ trợ hoặc lỗi cú pháp JSON.
     pub fn parse(raw: &RawMarketMessage) -> Result<MarketMessage, MarketDataError> {
         match raw {
             RawMarketMessage::Text(text) => Self::parse_json(text),
@@ -63,7 +93,14 @@ impl MarketDataParser {
         }
     }
 
-    /// Parse từ chuỗi JSON text
+    /// Phân tích cú pháp chuỗi JSON text thành đối tượng [`MarketMessage`].
+    ///
+    /// # Tham số:
+    /// - `text`: Chuỗi JSON nhận được từ máy chủ sàn (chứa trường `"type"` nhận diện: trade, quote, heartbeat, error).
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(MarketMessage)`: Đối tượng bản tin phân loại tương ứng.
+    /// - `Err(MarketDataError::ParseError)`: Nếu chuỗi JSON sai cú pháp hoặc thiếu các trường dữ liệu bắt buộc.
     pub fn parse_json(text: &str) -> Result<MarketMessage, MarketDataError> {
         let msg = serde_json::from_str::<MarketMessage>(text)
             .map_err(|e| MarketDataError::ParseError(e.to_string()))?;
@@ -73,6 +110,18 @@ impl MarketDataParser {
 }
 
 impl MarketMessage {
+    /// Chuyển đổi (adapt) bản tin sàn [`MarketMessage`] sang sự kiện miền lõi [`MarketEvent`] (nếu có).
+    ///
+    /// # Cơ chế:
+    /// - [`MarketMessage::Trade`]: Chuẩn hóa timestamp sang [`MarketTimestamp`], thẩm định qua [`Trade::new`], trả về `Ok(Some(MarketEvent::Trade))`.
+    /// - [`MarketMessage::Quote`]: Chuẩn hóa timestamp, thẩm định qua [`Quote::new`] (kiểm tra chéo giá crossed market, giá không âm...), trả về `Ok(Some(MarketEvent::Quote))`.
+    /// - [`MarketMessage::Heartbeat`] / [`MarketMessage::Pong`]: Trả về `Ok(None)` vì là bản tin giao thức, không đẩy vào pipeline phân tích.
+    /// - [`MarketMessage::ExchangeError`]: Chuyển đổi thành lỗi [`MarketDataError::ParseError`] mang thông điệp từ sàn.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(Some(MarketEvent))`: Sự kiện thị trường chuẩn hóa sẵn sàng chuyển vào State Store / Indicator Engine.
+    /// - `Ok(None)`: Bản tin điều khiển kết nối không cần xử lý downstream.
+    /// - `Err(MarketDataError)`: Nếu dữ liệu trong sự kiện vi phạm các quy tắc nghiệp vụ thị trường.
     pub fn try_into_market_event(&self) -> Result<Option<MarketEvent>, MarketDataError> {
         match self {
             MarketMessage::Trade(trade) => {

@@ -5,6 +5,14 @@ use std::time::Duration;
 use vn30_domain::market::MarketEvent;
 use vn30_domain::timestamp::MarketTimestamp;
 
+/// Bộ sắp xếp thứ tự sự kiện thị trường và xử lý dữ liệu đến lệch trình tự (Out-of-order Event Sequencer).
+///
+/// Trong môi trường giao dịch mạng thực tế, các gói tin WebSocket có thể đến không đúng thứ tự thời gian phát sinh.
+/// `EventSequencer` sử dụng thuật toán Watermark và cấu trúc cây tìm kiếm `BTreeMap` để:
+/// - Đệm tạm thời các sự kiện.
+/// - Cho phép dữ liệu đến trễ trong một khoảng thời gian chấp nhận được (`allowed_lateness`).
+/// - Dâng Watermark tăng dần đơn điệu theo mốc thời gian lớn nhất từng thấy (`max_seen_ts`).
+/// - Giải phóng các sự kiện theo đúng thứ tự thời gian tăng dần tuyệt đối khi Watermark vượt qua chúng.
 pub struct EventSequencer {
     pub max_capacity: usize,
     pub allowed_lateness: Duration,
@@ -14,16 +22,29 @@ pub struct EventSequencer {
     pub current_size: usize,
 }
 
+/// Kết quả phân loại khi đẩy một sự kiện vào [`EventSequencer`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PushResult {
+    /// Sự kiện được tiếp nhận và đệm thành công vào bộ sắp xếp.
     Buffered,
+    /// Sự kiện bị loại bỏ vì đến quá muộn (mốc thời gian của sự kiện nhỏ hơn Watermark đã đóng).
     DroppedLate {
+        /// Mốc thời gian của sự kiện bị loại bỏ.
         event_ts: MarketTimestamp,
+        /// Mốc Watermark hiện tại của sequencer.
         watermark: MarketTimestamp,
     },
 }
 
 impl EventSequencer {
+    /// Khởi tạo một `EventSequencer` mới.
+    ///
+    /// # Tham số:
+    /// - `allowed_lateness`: Khoảng thời gian tối đa cho phép một sự kiện đến trễ (ví dụ: `Duration::from_millis(500)`).
+    /// - `max_capacity`: Số lượng sự kiện tối đa được phép đệm trong RAM để phòng chống tràn bộ nhớ.
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Instance mới với Watermark ban đầu là `None`.
     pub fn new(allowed_lateness: Duration, max_capacity: usize) -> Self {
         return Self {
             max_capacity,
@@ -34,6 +55,20 @@ impl EventSequencer {
             current_size: 0,
         };
     }
+
+    /// Đẩy một sự kiện thị trường vào bộ đệm và tính toán cập nhật Watermark.
+    ///
+    /// # Quy trình kiểm tra:
+    /// 1. Nếu đã có `watermark` và `event_ts < watermark`: Trả về [`PushResult::DroppedLate`].
+    /// 2. Nếu `event_ts > max_seen_ts`: Cập nhật `max_seen_ts = event_ts`, tính mốc Watermark tự nhiên
+    ///    `natural_wm = event_ts - allowed_lateness`, và dâng `watermark = max(watermark, natural_wm)`.
+    /// 3. Thêm sự kiện vào `buffers` theo khóa `event_ts` và tăng `current_size`.
+    ///
+    /// # Tham số:
+    /// - `event`: Sự kiện thị trường cần đẩy vào bộ đệm.
+    ///
+    /// # Giá trị trả về:
+    /// - [`PushResult`]: [`PushResult::Buffered`] nếu thành công, hoặc [`PushResult::DroppedLate`] nếu quá muộn.
     pub fn push(&mut self, event: MarketEvent) -> PushResult {
         let event_ts = event.timestamp(); // nó sẽ trả về MarketTimestamp
 
@@ -67,8 +102,20 @@ impl EventSequencer {
         return PushResult::Buffered;
     }
 
-    // hàm dùng để ép xả các phần tử có timestamp nhỏ hơn watermark
-    // hàm này dùng để xử lý khi có sự kiện bị trễ mạng và kích thước bộ đệm vượt quá mức cho phép
+    /// Tiếp nhận một sự kiện thị trường và tự động xả các sự kiện đã sẵn sàng (đạt ngưỡng Watermark).
+    ///
+    /// # Cơ chế:
+    /// 1. Gọi [`Self::push`] để tiếp nhận sự kiện.
+    /// 2. Nếu được chấp nhận ([`PushResult::Buffered`]):
+    ///    - Tự động gọi [`Self::flush_ready`] để lấy tất cả các sự kiện có mốc thời gian `<= watermark`.
+    ///    - Nếu kích thước bộ đệm vượt quá `max_capacity`: Thực hiện ép xả (eviction) phần tử cũ nhất ở đầu `BTreeMap`,
+    ///      đồng thời dâng Watermark lên mốc vừa bị xả để duy trì bất biến thứ tự.
+    ///
+    /// # Tham số:
+    /// - `event`: Sự kiện thị trường mới nhận được.
+    ///
+    /// # Giá trị trả về:
+    /// - `(PushResult, Vec<MarketEvent>)`: Bộ đôi gồm kết quả đẩy tin và danh sách các sự kiện đã sắp xếp sẵn sàng phát tán.
     pub fn ingest(&mut self, event: MarketEvent) -> (PushResult, Vec<MarketEvent>) {
         let push_res = self.push(event);
         let mut ready = Vec::new();
@@ -104,6 +151,10 @@ impl EventSequencer {
         }
     }
 
+    /// Xả tất cả các sự kiện đã đủ điều kiện chín muồi (mốc thời gian `<= watermark`).
+    ///
+    /// # Giá trị trả về:
+    /// - `Vec<MarketEvent>`: Danh sách các sự kiện được xả ra theo đúng thứ tự thời gian tăng dần.
     pub fn flush_ready(&mut self) -> Vec<MarketEvent> {
         let mut ready_events: Vec<MarketEvent> = Vec::new();
 
@@ -126,9 +177,13 @@ impl EventSequencer {
         return ready_events;
     }
 
-    // Hàm này dùng khi hệ thống đóng kết nối (shutdown),
-    //hết phiên giao dịch, hoặc khi cần xả sạch toàn bộ sự kiện còn sót lại
-    //trong buffer ra ngoài (không cần chờ Watermark):
+    /// Xả sạch toàn bộ sự kiện hiện có trong bộ đệm mà không cần chờ mốc Watermark.
+    ///
+    /// Hàm này phục vụ khi đóng hệ thống (graceful shutdown), kết thúc phiên giao dịch (hết giờ ATC 14:45),
+    /// hoặc khi cần giải phóng toàn bộ hàng đợi trước khi tái khởi động bộ sequencer.
+    ///
+    /// # Giá trị trả về:
+    /// - `Vec<MarketEvent>`: Toàn bộ sự kiện còn sót lại trong RAM, được sắp xếp đúng thứ tự mốc thời gian.
     pub fn flush_all(&mut self) -> Vec<MarketEvent> {
         let mut ready_events: Vec<MarketEvent> = Vec::new();
         let map_buffers = mem::take(&mut self.buffers);

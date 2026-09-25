@@ -8,34 +8,52 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 use vn30_domain::errors::MarketDataError;
 
-/// Trạng thái kết nối WebSocket của Client
+/// Trạng thái vòng đời kết nối WebSocket của Client với máy chủ sàn giao dịch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionState {
+    /// Đang ngắt kết nối (chưa kết nối hoặc đã bị rớt mạng).
     Disconnected,
+    /// Đang trong tiến trình thiết lập kết nối TCP/TLS hoặc gửi frame xác thực.
     Connecting,
+    /// Kết nối thành công, bắt tay hoàn tất và đang nhận dữ liệu bình thường.
     Connected,
+    /// Đang chờ theo chính sách backoff để kết nối lại sau sự cố mất mạng hoặc Stale.
     Reconnecting,
+    /// Kết nối đã bị đóng chủ động (Shutdown hoặc chấm dứt tiến trình).
     Closed,
 }
 
-/// Định dạng message thô nhận từ WebSocket stream
+/// Định dạng bản tin thô nhận được từ socket stream trước khi phân tích cú pháp.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RawMarketMessage {
+    /// Frame dữ liệu văn bản UTF-8 (chuỗi JSON payload).
     Text(String),
+    /// Frame dữ liệu nhị phân (Binary payload).
     Binary(Vec<u8>),
+    /// Frame Ping kiểm tra kết nối từ máy chủ WebSocket.
     Ping(Vec<u8>),
+    /// Frame Pong phản hồi tín hiệu Ping.
     Pong(Vec<u8>),
 }
 
-/// WebSocket Client kết nối đến nhà cung cấp dữ liệu thị trường
+/// Client WebSocket chịu trách nhiệm kết nối mạng TCP/TLS tới sàn giao dịch.
 #[derive(Debug, Clone)]
 pub struct WebSocketClient {
+    /// Địa chỉ WebSocket endpoint (ví dụ: `"wss://api.provider.vn/stream"`).
     pub endpoint: String,
+    /// Kích thước bộ đệm kênh MPSC bounded channel chống tràn bộ nhớ.
     pub channel_capacity: usize,
 }
 
 impl WebSocketClient {
-    /// Khởi tạo instance WebSocketClient mới
+    /// Khởi tạo một thực thể [`WebSocketClient`] mới với endpoint và dung lượng buffer tương ứng.
+    ///
+    /// # Tham số:
+    /// - `endpoint`: Địa chỉ URL WebSocket của nhà cung cấp (ví dụ: `"wss://api.ssi.com.vn/stream"`).
+    /// - `channel_capacity`: Kích thước tối đa của kênh mpsc bounded channel dùng để đệm các frame thô nhận được.
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Client sẵn sàng kết nối.
     pub fn new<S>(endpoint: S, channel_capacity: usize) -> Self
     where
         S: Into<String>,
@@ -46,9 +64,21 @@ impl WebSocketClient {
         }
     }
 
-    /// Thiết lập kết nối bất đồng bộ và trả về:
-    /// 1. `Receiver<RawMarketMessage>`: Channel nhận frame dữ liệu
-    /// 2. `JoinHandle<()>`: Task handle của background read loop
+    /// Thiết lập kết nối bất đồng bộ tới máy chủ WebSocket và kích hoạt vòng lặp nhận frame ngầm định.
+    ///
+    /// # Cơ chế:
+    /// 1. Kết nối TCP/TLS tới `endpoint` thông qua `tokio-tungstenite`.
+    /// 2. Khởi tạo một bounded mpsc channel với dung lượng `channel_capacity` để chống tràn bộ nhớ (backpressure).
+    /// 3. Khởi chạy một tokio task chạy ngầm liên tục lắng nghe frame từ socket, phân loại thành [`RawMarketMessage`]
+    ///    và chuyển tiếp vào channel.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok((Receiver<RawMarketMessage>, JoinHandle<()>))`:
+    ///   - Đầu đọc channel (`Receiver`) để tầng trên tiêu thụ dữ liệu.
+    ///   - `JoinHandle` của background reader task để giám sát vòng đời.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::ConnectionError`]: Nếu bắt tay TCP hoặc TLS thất bại, hoặc URL endpoint không hợp lệ.
     pub async fn connect(
         &self,
     ) -> Result<(Receiver<RawMarketMessage>, JoinHandle<()>), MarketDataError> {

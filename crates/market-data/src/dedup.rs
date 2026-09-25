@@ -2,6 +2,14 @@ use std::collections::{hash_map, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use vn30_domain::market::{MarketEvent, Quote};
 
+/// Bộ lọc trùng lặp sự kiện dữ liệu thị trường (Event Deduplicator).
+///
+/// Sử dụng cấu trúc lai giữa `HashSet<u64>` (tra cứu mã băm $O(1)$) và `VecDeque<u64>` (ring-buffer FIFO)
+/// để giới hạn kích thước bộ nhớ tối đa (`capacity`).
+///
+/// # Quy tắc nghiệp vụ thị trường:
+/// - **Quote (Sổ lệnh):** Chỉ giữ lại các bản tin có sự thay đổi về giá, khối lượng hoặc mốc thời gian. Các Quote trùng lặp fingerprint sẽ bị loại bỏ để giảm tải tính toán.
+/// - **Trade (Khớp lệnh):** Luôn bảo toàn 100% (không bao giờ drop Trade) vì mỗi lệnh khớp là một sự kiện thị trường thực tế riêng biệt.
 #[derive(Debug)]
 pub struct EventDeduplicator {
     capacity: usize,
@@ -16,7 +24,14 @@ pub struct EventDeduplicator {
 }
 
 impl EventDeduplicator {
-    /// Khởi tạo bộ deduplicator với giới hạn dung lượng (capacity) và cờ dedup_trades
+    /// Khởi tạo một `EventDeduplicator` mới với dung lượng buffer giới hạn và tùy chọn lọc trade.
+    ///
+    /// # Tham số:
+    /// - `capacity`: Số lượng fingerprint tối đa lưu trong RAM. Nếu truyền `0`, hệ thống tự fallback về mặc định `10_000`.
+    /// - `dedup_trades`: Cờ cho phép lọc trùng Trade (thường đặt là `false` theo quy chuẩn an toàn tài chính).
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Instance sẵn sàng lọc sự kiện.
     pub fn new(capacity: usize, dedup_trades: bool) -> Self {
         let cap = if capacity == 0 { 10_000 } else { capacity };
         Self {
@@ -30,7 +45,21 @@ impl EventDeduplicator {
         }
     }
 
-    // hàm tính fingerprint mã băm duy nhất
+    /// Tính toán mã băm nhận diện duy nhất (64-bit Fingerprint) cho một bản tin [`Quote`].
+    ///
+    /// Fingerprint được tính toán tổng hợp từ 6 trường:
+    /// 1. `symbol` (Mã chứng khoán).
+    /// 2. `bid_price` (Dạng bit biểu diễn `f64::to_bits()`).
+    /// 3. `bid_vol` (Dạng bit biểu diễn `f64::to_bits()`).
+    /// 4. `ask_price` (Dạng bit biểu diễn `f64::to_bits()`).
+    /// 5. `ask_vol` (Dạng bit biểu diễn `f64::to_bits()`).
+    /// 6. `timestamp` (Mốc thời gian phát sinh sự kiện).
+    ///
+    /// # Tham số:
+    /// - `quote`: Tham chiếu tới bản tin Quote cần tạo fingerprint.
+    ///
+    /// # Giá trị trả về:
+    /// - `u64`: Mã băm định danh duy nhất của Quote.
     pub fn fingerprint(quote: &Quote) -> u64 {
         let mut hasher = hash_map::DefaultHasher::new();
         quote.symbol.hash(&mut hasher);
@@ -42,7 +71,23 @@ impl EventDeduplicator {
         return hasher.finish();
     }
 
-    //kiểm tra trùng lặp và đẩy phần tử cũ ra ngoài khi vượt quá capacity
+    /// Kiểm tra xem một sự kiện thị trường [`MarketEvent`] có bị trùng lặp hay không.
+    ///
+    /// # Cơ chế:
+    /// 1. Tăng bộ đếm `total_received`.
+    /// 2. Nếu là [`MarketEvent::Quote`]:
+    ///    - Tính `fingerprint(quote)`.
+    ///    - Nếu đã có trong `seen_quotes`: Tăng `dropped_quotes` và trả về `true`.
+    ///    - Nếu chưa có: Thêm vào `seen_quotes` và `order_quotes`. Nếu vượt quá `capacity`,
+    ///      xóa phần tử cũ nhất ở đầu hàng đợi (`pop_front`) để giải phóng bộ nhớ. Trả về `false`.
+    /// 3. Nếu là [`MarketEvent::Trade`]: Luôn trả về `false` (bảo toàn giao dịch khớp lệnh).
+    ///
+    /// # Tham số:
+    /// - `event`: Tham chiếu tới sự kiện thị trường cần kiểm tra.
+    ///
+    /// # Giá trị trả về:
+    /// - `true`: Sự kiện bị trùng lặp (cần drop/loại bỏ).
+    /// - `false`: Sự kiện hợp lệ mới (cần tiếp tục xử lý).
     pub fn is_duplicate(&mut self, event: &MarketEvent) -> bool {
         self.total_received += 1;
 
@@ -70,27 +115,27 @@ impl EventDeduplicator {
         }
     }
 
-    /// Trả về capacity tối đa được cấu hình
+    /// Trả về giới hạn dung lượng lưu trữ tối đa (capacity) của bộ đệm.
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
-    /// Trả về cờ cấu hình dedup cho trade
+    /// Trả về trạng thái cờ cấu hình lọc trùng lặp cho Trade.
     pub fn dedup_trades(&self) -> bool {
         self.dedup_trades
     }
 
-    /// Tổng số bản tin sự kiện đã tiếp nhận
+    /// Tổng số lượng bản tin sự kiện thị trường đã tiếp nhận kể từ khi khởi tạo.
     pub fn total_received(&self) -> u64 {
         self.total_received
     }
 
-    /// Số lượng quote trùng lặp đã bị loại bỏ
+    /// Tổng số lượng bản tin Quote trùng lặp đã bị phát hiện và loại bỏ.
     pub fn dropped_quotes(&self) -> u64 {
         self.dropped_quotes
     }
 
-    /// Số lượng trade trùng lặp đã bị loại bỏ
+    /// Tổng số lượng bản tin Trade trùng lặp đã bị loại bỏ.
     pub fn dropped_trades(&self) -> u64 {
         self.dropped_trades
     }

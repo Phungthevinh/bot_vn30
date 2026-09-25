@@ -2,6 +2,12 @@ use std::collections::HashMap;
 use vn30_domain::errors::MarketDataError;
 use vn30_domain::symbol::Instrument;
 
+/// Bộ ánh xạ và chuẩn hóa mã chứng khoán (Symbol Mapper & Alias Resolver).
+///
+/// Hỗ trợ:
+/// - Đăng ký bí danh linh hoạt (ví dụ: hợp đồng tương lai tháng hiện tại `"VN30F1M"` -> `"VN30F2409"`).
+/// - Khử bỏ tiền tố/hậu tố sàn (ví dụ: `"HOSE:HPG"` -> `"HPG"`).
+/// - Phân giải và chuyển đổi thành đối tượng miền [`Instrument`].
 #[derive(Debug, Clone, Default)]
 pub struct SymbolMapper {
     /// Bảng tra cứu alias (ví dụ: "VN30F1M" -> "VN30F2409")
@@ -9,18 +15,43 @@ pub struct SymbolMapper {
 }
 
 impl SymbolMapper {
+    /// Khởi tạo một bộ ánh xạ mã mới với bảng bí danh rỗng.
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Instance mới sẵn sàng đăng ký alias và ánh xạ.
     pub fn new() -> Self {
         Self {
             aliases: HashMap::new(),
         }
     }
 
+    /// Đăng ký một bí danh (`alias`) trỏ tới mã chuẩn tắc (`canonical`).
+    ///
+    /// Cả hai chuỗi đều được tự động cắt tỉa khoảng trắng và chuyển chữ hoa.
+    ///
+    /// # Tham số:
+    /// - `alias`: Chuỗi bí danh đầu vào (ví dụ: `"VN30F1M"`).
+    /// - `canonical`: Mã chuẩn tắc tương ứng (ví dụ: `"VN30F2409"`).
     pub fn register_alias(&mut self, alias: &str, canonical: &str) {
         let alias_upper = alias.trim().to_uppercase();
         let canonical_upper = canonical.trim().to_uppercase();
         self.aliases.insert(alias_upper, canonical_upper);
     }
 
+    /// Ánh xạ một chuỗi ký hiệu đầu vào thô thành đối tượng công cụ tài chính chuẩn hóa ([`Instrument`]).
+    ///
+    /// # Quy trình xử lý:
+    /// 1. Chuẩn hóa chuỗi đầu vào (trim + uppercase).
+    /// 2. Tra cứu trong bảng `aliases`. Nếu tồn tại bí danh, sử dụng chuỗi canonical đích.
+    /// 3. Nếu không có trong alias, sử dụng trực tiếp chuỗi thô.
+    /// 4. Chuyển tiếp tới [`Instrument::parse_canonical`] để phân tích thành Stock, Index, hoặc IndexFuture.
+    ///
+    /// # Tham số:
+    /// - `raw`: Chuỗi ký hiệu cần ánh xạ (ví dụ: `"HOSE:HPG"`, `"VN30F1M"`, `"VN30"`).
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(Instrument)`: Công cụ tài chính hợp lệ đã được nhận diện.
+    /// - `Err(MarketDataError::InvalidData)`: Nếu mã không hợp lệ theo bất kỳ định dạng nào.
     pub fn map(&self, raw: &str) -> Result<Instrument, MarketDataError> {
         let raw = raw.trim().to_uppercase();
 
@@ -31,6 +62,14 @@ impl SymbolMapper {
         }
     }
 
+    /// Hàm tiện ích: Ánh xạ chuỗi thô và trích xuất trực tiếp chuỗi chuẩn tắc (`String`).
+    ///
+    /// # Tham số:
+    /// - `raw`: Chuỗi ký hiệu đầu vào.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(String)`: Tên mã chuẩn tắc (ví dụ: `"HPG"`, `"VN30F2409"`).
+    /// - `Err(MarketDataError::InvalidData)`: Nếu không thể nhận diện mã.
     pub fn map_to_canonical(&self, raw: &str) -> Result<String, MarketDataError> {
         self.map(raw).map(|inst| inst.as_str().to_string())
     }

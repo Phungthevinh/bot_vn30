@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Tập hợp các lỗi phát sinh trong quá trình nạp và thẩm định cấu hình ứng dụng (`AppConfig`).
 #[derive(Error, Debug)]
 pub enum ConfigError {
     #[error("Không thể đọc file cấu hình tại '{path}': {source}")]
@@ -16,6 +17,7 @@ pub enum ConfigError {
     MissingEnvVar(String),
 }
 
+/// Tập hợp các lỗi phát sinh trong tầng thu nhận và xử lý dữ liệu thị trường (Market Data Ingestion).
 #[derive(Error, Debug)]
 pub enum MarketDataError {
     #[error("Lỗi kết nối WebSocket: {0}")]
@@ -42,6 +44,7 @@ pub enum MarketDataError {
     CrossedMarket { symbol: String, bid: f64, ask: f64 },
 }
 
+/// Tập hợp các lỗi trong quá trình tính toán các chỉ báo kỹ thuật (RSI, MACD, Bollinger Bands...).
 #[derive(Error, Debug)]
 pub enum IndicatorError {
     #[error("Chưa đủ dữ liệu warm-up cho chỉ báo '{name}': yêu cầu {required}, hiện có {actual}")]
@@ -56,6 +59,7 @@ pub enum IndicatorError {
     InvalidParameter(String),
 }
 
+/// Tập hợp các lỗi trong engine thẩm định rủi ro và tính toán hệ số rủi ro / Beta.
 #[derive(Error, Debug)]
 pub enum RiskError {
     #[error("Dữ liệu nến không đủ để tính Beta/Risk: {0}")]
@@ -66,6 +70,7 @@ pub enum RiskError {
     RuleViolation(String),
 }
 
+/// Tập hợp các lỗi trong máy trạng thái quản lý tín hiệu giao dịch (Signal State Machine).
 #[derive(Error, Debug)]
 pub enum SignalError {
     #[error("Không thể sinh tín hiệu do thiếu dữ liệu: {0}")]
@@ -74,6 +79,7 @@ pub enum SignalError {
     Conflict(String),
 }
 
+/// Tập hợp các lỗi trong tầng Machine Learning (huấn luyện, nạp model, và suy luận inference).
 #[derive(Error, Debug)]
 pub enum ModelError {
     #[error("Không thể tải model artifact từ '{path}': {reason}")]
@@ -86,6 +92,7 @@ pub enum ModelError {
     IncompatibleVersion(String),
 }
 
+/// Tập hợp các lỗi trong quá trình gửi bản tin cảnh báo qua Telegram.
 #[derive(Error, Debug)]
 pub enum AlertError {
     #[error("Lỗi gửi tin nhắn Telegram: {0}")]
@@ -96,6 +103,9 @@ pub enum AlertError {
     FormattingError(String),
 }
 
+/// Enum lỗi miền gốc tổng hợp (Unified Domain Error taxonomy).
+///
+/// Tự động chuyển đổi từ tất cả các kiểu lỗi chuyên biệt thông qua cơ chế `#[from]`.
 #[derive(Debug, Error)]
 pub enum DomainError {
     #[error("Lỗi cấu hình: {0}")]

@@ -14,6 +14,13 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use vn30_domain::errors::MarketDataError;
 
+/// Bộ quản lý kết nối thị trường trung tâm (Market Connection Manager).
+///
+/// Chịu trách nhiệm:
+/// - Điều phối vòng đời kết nối WebSocket và chuyển đổi trạng thái ([`ConnectionState`]).
+/// - Thực hiện bắt tay xác thực tài khoản ([`Authenticator`]) và tái đăng ký danh mục ([`SubscriptionManager`]).
+/// - Tự động tái kết nối theo chính sách lũy thừa ([`ReconnectPolicy`]) khi mất mạng hoặc dữ liệu bị Stale.
+/// - Duy trì kênh gửi tin 2 chiều an toàn (`write_tx`) để gửi lệnh subscribe động hoặc phản hồi Ping/Pong.
 pub struct MarketConnectionManager {
     pub client: WebSocketClient,
     pub authenticator: Arc<dyn Authenticator>,
@@ -26,15 +33,29 @@ pub struct MarketConnectionManager {
     pub health_monitor: Arc<HealthMonitor>,
 }
 
+/// Chính sách tái kết nối sử dụng thuật toán suy giảm lũy thừa (Exponential Backoff).
 #[derive(Debug, Clone)]
 pub struct ReconnectPolicy {
+    /// Độ trễ thử lại ban đầu tính bằng mili-giây (ví dụ: 1.000ms).
     pub initial_backoff_ms: u64,
+    /// Độ trễ thử lại tối đa (trần trễ) tính bằng mili-giây (ví dụ: 30.000ms).
     pub max_backoff_ms: u64,
+    /// Số lần thử lại tối đa trước khi dừng (None nghĩa là thử lại vô hạn).
     pub max_retries: Option<usize>,
+    /// Hệ số nhân lũy thừa giữa các lần thử (ví dụ: 2.0 hoặc 1.5).
     pub backoff_factor: f64,
 }
 
 impl ReconnectPolicy {
+    /// Khởi tạo một chính sách Reconnect mới.
+    ///
+    /// # Tham số:
+    /// - `initial`: Độ trễ khởi đầu (ms).
+    /// - `max`: Độ trễ tối đa (ms).
+    /// - `backoff`: Hệ số nhân mũ.
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Chính sách tái kết nối cấu hình sẵn.
     pub fn new(initial: u64, max: u64, backoff: f64) -> Self {
         Self {
             initial_backoff_ms: initial,
@@ -44,6 +65,16 @@ impl ReconnectPolicy {
         }
     }
 
+    /// Tính toán thời gian chờ kết nối lại (mili-giây) dựa trên số lần thử thất bại hiện tại (`attempt`).
+    ///
+    /// # Công thức:
+    /// `delay = min(initial_backoff_ms * backoff_factor ^ attempt, max_backoff_ms)`
+    ///
+    /// # Tham số:
+    /// - `attempt`: Số lần kết nối thất bại liên tiếp (1, 2, 3...).
+    ///
+    /// # Giá trị trả về:
+    /// - `u64`: Khoảng thời gian ngủ (sleep) tính bằng mili-giây trước lần kết nối kế tiếp.
     pub fn calculate_delay_ms(&self, attempt: usize) -> u64 {
         // tính thời gian chờ tăng dần theo cấp số nhân và không vượt quá max_backoff_ms).
         let base_delay = (self.initial_backoff_ms as f64 * self.backoff_factor.powf(attempt as f64))
@@ -54,6 +85,15 @@ impl ReconnectPolicy {
 }
 
 impl MarketConnectionManager {
+    /// Khởi tạo một `MarketConnectionManager` mới.
+    ///
+    /// # Tham số:
+    /// - `client`: WebSocketClient chứa endpoint kết nối.
+    /// - `authenticator`: Bộ sinh/thẩm định gói tin xác thực.
+    /// - `subscription_manager`: Quản lý danh sách các mã cổ phiếu đang theo dõi.
+    /// - `health_monitor`: Giám sát nhịp tim và dữ liệu quá hạn.
+    /// - `event_sender`: Kênh gửi các frame thô thu được tới pipeline phân tích.
+    /// - `reconnect_policy`: Quy tắc tính thời gian chờ tái kết nối.
     pub fn new(
         client: WebSocketClient,
         authenticator: Arc<dyn Authenticator>,
@@ -75,6 +115,18 @@ impl MarketConnectionManager {
         }
     }
 
+    /// Thiết lập kết nối WebSocket và hoàn tất các thủ tục bắt tay ban đầu (Handshake).
+    ///
+    /// # Các bước thực hiện:
+    /// 1. Kết nối TCP/TLS tới endpoint WebSocket.
+    /// 2. Gửi frame xác thực (nếu cấu hình yêu cầu) và chờ thẩm định phản hồi từ sàn.
+    /// 3. Gửi frame đăng ký nhận dữ liệu cho toàn bộ các mã đang theo dõi ([`SubscriptionManager::generate_resubscribe_message`]).
+    /// 4. Cập nhật trạng thái sang [`ConnectionState::Connected`] và ghi nhận mốc thời gian vào `health_monitor`.
+    /// 5. Tạo kênh `write_tx` (dung lượng 1024) và tách riêng writer task để hỗ trợ gửi tin 2 chiều.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(SplitStream)`: Luồng đọc (`ws_read`) của WebSocket connection.
+    /// - `Err(MarketDataError::ConnectionError)`: Nếu kết nối, xác thực hoặc đăng ký thất bại.
     pub async fn connect_and_handshake(
         &mut self,
     ) -> Result<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>, MarketDataError> {
@@ -145,6 +197,12 @@ impl MarketConnectionManager {
         Ok(ws_read)
     }
 
+    /// Vòng lặp điều phối chính (Event Loop) quản lý kết nối dài hạn và tự phục hồi (Self-Healing).
+    ///
+    /// Chạy liên tục để:
+    /// - Quản lý máy trạng thái Reconnect kết hợp kiểm tra `reconnect_policy`.
+    /// - Đọc các frame WebSocket đến, phản hồi Pong tự động cho các Ping của sàn.
+    /// - Giám sát định kỳ 2 giây/lần bằng `health_monitor`, chủ động ngắt kết nối và thử lại nếu phát hiện Stale hoặc Dead.
     pub async fn run(&mut self) {
         let mut attempt = 0;
 
@@ -244,6 +302,14 @@ impl MarketConnectionManager {
         }
     }
 
+    /// Gửi một frame WebSocket bất đồng bộ lên sàn giao dịch thông qua writer channel.
+    ///
+    /// # Tham số:
+    /// - `message`: Tungstenite WebSocket [`Message`] cần gửi (Text, Binary, Ping, Pong...).
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(())`: Gửi frame vào hàng đợi writer thành công.
+    /// - `Err(MarketDataError::ConnectionError)`: Nếu kết nối hiện đang ngắt hoặc writer task đã bị đóng.
     pub async fn send_message(&self, message: Message) -> Result<(), MarketDataError> {
         let guard = self.write_tx.read().await;
         if let Some(ws_write) = guard.as_ref() {

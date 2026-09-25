@@ -2,28 +2,56 @@ use serde_json::json;
 use serde_json::Value;
 use vn30_domain::errors::MarketDataError;
 
-/// Các phương thức xác thực hỗ trợ
-#[derive(Clone, PartialEq, Eq)]
+/// Các phương thức xác thực tài khoản hỗ trợ khi kết nối WebSocket tới sàn giao dịch.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum AuthMethod {
-    None, // Dùng cho Mock Server hoặc môi trường dev
-    ApiKey { api_key: String, secret_key: String },
+    /// Không yêu cầu xác thực (thường dùng cho Mock Server nội bộ hoặc môi trường thử nghiệm).
+    None,
+    /// Xác thực thông qua cặp khóa bí mật (`api_key` và `secret_key`).
+    ApiKey {
+        /// Khóa định danh API.
+        api_key: String,
+        /// Khóa bí mật dùng để ký/xác thực.
+        secret_key: String,
+    },
+    /// Xác thực thông qua Token Bearer (ví dụ: JWT hoặc Session Token cấp phát trước).
     BearerToken(String),
 }
 
-/// Interface chung cho việc tạo payload xác thực và thẩm định phản hồi
+/// Interface trừu tượng hóa cơ chế xác thực với các sàn giao dịch chứng khoán qua WebSocket.
 pub trait Authenticator: Send + Sync {
-    /// Sinh message/frame xác thực gửi lên sàn
+    /// Sinh bản tin xác thực dạng chuỗi JSON để gửi lên sàn trong giai đoạn bắt tay kết nối (handshake).
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(Some(String))`: Chuỗi JSON payload xác thực sẵn sàng gửi.
+    /// - `Ok(None)`: Nếu phương thức xác thực là [`AuthMethod::None`] (không cần gửi frame auth).
+    /// - `Err(MarketDataError::AuthenticationError)`: Nếu thông tin định danh bị rỗng hoặc không hợp lệ.
     fn generate_auth_message(&self) -> Result<Option<String>, MarketDataError>;
 
-    /// Thẩm định frame phản hồi từ sàn xem xác thực đã thành công hay thất bại
+    /// Thẩm định frame phản hồi từ máy chủ sàn sau khi gửi bản tin xác thực.
+    ///
+    /// # Tham số:
+    /// - `response`: Chuỗi phản hồi nhận được từ máy chủ sàn giao dịch.
+    ///
+    /// # Giá trị trả về:
+    /// - `Ok(true)`: Xác thực thành công (trường `"status": "ok"`).
+    /// - `Err(MarketDataError::AuthenticationError)`: Nếu sàn từ chối quyền truy cập hoặc phản hồi sai định dạng JSON.
     fn verify_auth_response(&self, response: &str) -> Result<bool, MarketDataError>;
 }
 
+/// Bộ triển khai mặc định của [`Authenticator`], hỗ trợ cả 3 cơ chế xác thực phổ biến (None, ApiKey, BearerToken).
 pub struct DefaultAuthenticator {
     method: AuthMethod,
 }
 
 impl DefaultAuthenticator {
+    /// Khởi tạo một đối tượng xác thực mới với phương thức tương ứng.
+    ///
+    /// # Tham số:
+    /// - `method_auth`: Phương thức xác thực được chọn ([`AuthMethod`]).
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Đối tượng xác thực sẵn sàng tham gia quy trình kết nối.
     pub fn new(method_auth: AuthMethod) -> Self {
         Self {
             method: method_auth,
@@ -32,6 +60,15 @@ impl DefaultAuthenticator {
 }
 
 impl Authenticator for DefaultAuthenticator {
+    /// Sinh payload xác thực JSON tương ứng với phương thức cấu hình ban đầu.
+    ///
+    /// # Các trường hợp:
+    /// - [`AuthMethod::None`]: Trả về `Ok(None)`.
+    /// - [`AuthMethod::ApiKey`]: Yêu cầu cả `api_key` và `secret_key` không rỗng; sinh frame `{"type":"auth","api_key":...,"secret_key":...}`.
+    /// - [`AuthMethod::BearerToken`]: Yêu cầu `token` không rỗng; sinh frame `{"type":"auth","token":...}`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::AuthenticationError`]: Nếu thông tin khóa hoặc token bị bỏ trống.
     fn generate_auth_message(&self) -> Result<Option<String>, MarketDataError> {
         match &self.method {
             AuthMethod::None => Ok(None),
@@ -59,6 +96,16 @@ impl Authenticator for DefaultAuthenticator {
             }
         }
     }
+
+    /// Thẩm định tính hợp lệ của bản tin phản hồi đăng nhập từ sàn giao dịch.
+    ///
+    /// # Phân tích phản hồi:
+    /// - Kỳ vọng cấu trúc JSON có trường `"status"`.
+    /// - Nếu `"status" == "ok"`: Trả về `Ok(true)`.
+    /// - Ngược lại: Trả về lỗi [`MarketDataError::AuthenticationError`] kèm thông điệp chi tiết từ trường `"message"`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::AuthenticationError`]: Nếu không phân tích được cú pháp JSON hoặc sàn báo lỗi xác thực.
     fn verify_auth_response(&self, response: &str) -> Result<bool, MarketDataError> {
         let res: Value = serde_json::from_str(response).map_err(|e| {
             MarketDataError::AuthenticationError(format!(

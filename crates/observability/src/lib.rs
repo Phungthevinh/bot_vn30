@@ -2,7 +2,18 @@
 
 use tracing_subscriber::EnvFilter;
 
-/// Khởi tạo hệ thống logging với tracing subscriber
+/// Khởi tạo hệ thống logging tập trung cho toàn bộ ứng dụng sử dụng `tracing-subscriber`.
+///
+/// Thiết lập một định dạng subscriber hiển thị log ra stdout, kết hợp lọc theo cấp độ ghi log
+/// được truyền vào hoặc ghi đè thông qua biến môi trường `RUST_LOG`.
+///
+/// # Tham số:
+/// - `log_level`: Chuỗi định danh mức độ log mặc định (ví dụ: `"info"`, `"debug"`, `"error"`, `"warn"`, `"trace"`).
+///
+/// # Cơ chế hoạt động:
+/// 1. Kiểm tra biến môi trường `RUST_LOG`, nếu tồn tại sẽ ưu tiên sử dụng.
+/// 2. Nếu `RUST_LOG` không được thiết lập, áp dụng mức log từ tham số `log_level`.
+/// 3. Khởi tạo global default subscriber bằng `try_init()` để tránh panic nếu hàm được gọi nhiều lần (ví dụ trong unit tests).
 pub fn init_logging(log_level: &str) {
     // 1. Tạo EnvFilter từ log_level hoặc RUST_LOG nếu có
     let env_filter =

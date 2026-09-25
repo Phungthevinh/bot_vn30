@@ -1,13 +1,22 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// Phân loại trạng thái sức khỏe của kết nối dữ liệu thị trường (Health Status).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HealthStatus {
-    Healthy,         // Đang nhận tin tức đều đặn trong ngưỡng
-    HeartbeatMissed, // Quá hạn heartbeat nhưng chưa vượt ngưỡng staleness tối đa
-    Stale,           // Vượt ngưỡng max_tick_staleness -> Cần kích hoạt Reconnect
-    Dead,            // Mất kết nối hoàn toàn hoặc không nhận được frame nào
+    /// Đang nhận tin tức đều đặn trong ngưỡng an toàn (thời gian trễ < heartbeat_timeout).
+    Healthy,
+    /// Đã quá hạn heartbeat thông thường nhưng chưa vượt ngưỡng staleness tối đa.
+    HeartbeatMissed,
+    /// Vượt ngưỡng staleness tối đa -> Dữ liệu đã bị đông cứng, cần kích hoạt Reconnect khẩn cấp.
+    Stale,
+    /// Mất kết nối hoàn toàn hoặc từ lúc khởi động chưa từng nhận được bất kỳ frame nào.
+    Dead,
 }
 
+/// Bộ giám sát sức khỏe kết nối phi khóa (Lock-free Health Monitor) sử dụng `AtomicU64`.
+///
+/// Cho phép cập nhật timestamp từ Reader task song song với việc kiểm tra định kỳ từ Task giám sát
+/// mà không xảy ra tranh chấp khóa (contention-free).
 #[derive(Debug)]
 pub struct HealthMonitor {
     last_message_ts: AtomicU64,
@@ -17,6 +26,14 @@ pub struct HealthMonitor {
 }
 
 impl HealthMonitor {
+    /// Khởi tạo một bộ giám sát sức khỏe mới với các ngưỡng thời gian tính bằng mili-giây.
+    ///
+    /// # Tham số:
+    /// - `heartbeat_timeout_ms`: Ngưỡng thời gian cảnh báo mất heartbeat (ví dụ: 5.000ms).
+    /// - `staleness_timeout_ms`: Ngưỡng thời gian tối đa không có dữ liệu trước khi coi là mất kết nối (ví dụ: 30.000ms).
+    ///
+    /// # Giá trị trả về:
+    /// - `Self`: Instance với các mốc thời gian ban đầu bằng 0 (trạng thái ban đầu là `Dead`).
     pub fn new(heartbeat_timeout_ms: u64, staleness_timeout_ms: u64) -> Self {
         Self {
             last_message_ts: AtomicU64::new(0),
@@ -26,12 +43,22 @@ impl HealthMonitor {
         }
     }
 
-    // --- 1. cập nhật atomic ---
+    /// Ghi nhận mốc thời gian nhận được bản tin dữ liệu thị trường bất kỳ (Trade/Quote/Ping...).
+    ///
+    /// Cập nhật nguyên tử mốc `last_message_ts` bằng `Ordering::Relaxed`.
+    ///
+    /// # Tham số:
+    /// - `current_ts_ms`: Thời điểm hiện tại tính bằng Unix epoch mili-giây.
     pub fn record_message(&self, current_ts_ms: u64) {
         self.last_message_ts.store(current_ts_ms, Ordering::Relaxed);
     }
 
-    // --- 2.  (cập nhật atomic cả message lẫn heartbeat) ---
+    /// Ghi nhận mốc thời gian nhận được tín hiệu Heartbeat từ máy chủ sàn.
+    ///
+    /// Đồng thời cập nhật cả `last_heartbeat_ts` và `last_message_ts`.
+    ///
+    /// # Tham số:
+    /// - `current_ts_ms`: Thời điểm nhận tín hiệu nhịp tim tính bằng Unix epoch mili-giây.
     pub fn record_heartbeat(&self, current_ts_ms: u64) {
         self.last_heartbeat_ts
             .store(current_ts_ms, Ordering::Relaxed);
@@ -39,28 +66,36 @@ impl HealthMonitor {
         self.last_message_ts.store(current_ts_ms, Ordering::Relaxed);
     }
 
-    // --- 3. Hàm kiểm tra sức khỏe (gọi định kỳ bởi Task riêng hoặc trong vòng lặp chính) ---
+    /// Thẩm định trạng thái sức khỏe hiện tại của kết nối đối chiếu với mốc thời gian `current_time_ms`.
+    ///
+    /// # Quy tắc phân loại:
+    /// 1. Nếu chưa từng nhận bản tin nào (`last_message_ts == 0`): Trả về [`HealthStatus::Dead`].
+    /// 2. Nếu độ trễ `>= staleness_timeout_ms`: Trả về [`HealthStatus::Stale`] (kích hoạt reconnect).
+    /// 3. Nếu độ trễ `>= heartbeat_timeout_ms`: Trả về [`HealthStatus::HeartbeatMissed`].
+    /// 4. Ngược lại: Trả về [`HealthStatus::Healthy`].
+    ///
+    /// # Tham số:
+    /// - `current_time_ms`: Thời điểm hiện tại tính bằng Unix epoch mili-giây.
+    ///
+    /// # Giá trị trả về:
+    /// - [`HealthStatus`]: Trạng thái đánh giá tại thời điểm kiểm tra.
     pub fn check_health(&self, current_time_ms: u64) -> HealthStatus {
-        let message_ts = self.last_message_ts.load(Ordering::Relaxed); //10.000
+        let message_ts = self.last_message_ts.load(Ordering::Relaxed);
 
-        // false
         if message_ts == 0 {
             return HealthStatus::Dead;
         }
 
-        let message_age = current_time_ms.saturating_sub(message_ts); //12.000 - 10.000 = 2.000
+        let message_age = current_time_ms.saturating_sub(message_ts);
 
-        // 2.000 >= 30.000 false
         if message_age >= self.staleness_timeout_ms {
             return HealthStatus::Stale;
         }
 
-        // 2.000 >= 5.000 && 2.000 < 30.000  false
         if message_age >= self.heartbeat_timeout_ms {
             return HealthStatus::HeartbeatMissed;
         }
 
-        // true
         HealthStatus::Healthy
     }
 }

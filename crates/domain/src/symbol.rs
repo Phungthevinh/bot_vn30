@@ -1,28 +1,58 @@
 use crate::errors::MarketDataError;
 
+/// Enum đại diện cho các loại công cụ tài chính được giao dịch trên thị trường Việt Nam.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instrument {
+    /// Cổ phiếu cơ sở (ví dụ: `"HPG"`, `"FPT"`, `"VNM"`).
     Stock(StockSymbol),
+    /// Hợp đồng tương lai chỉ số VN30 (ví dụ: `"VN30F2409"`).
     IndexFuture(FutureContract),
+    /// Chỉ số thị trường (ví dụ: `"VN30"`, `"VNINDEX"`).
     Index(IndexSymbol),
 }
+
+/// Biểu diễn mã cổ phiếu cơ sở hợp lệ (chuẩn 3 ký tự chữ cái trên HOSE, HNX, UPCOM).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StockSymbol {
+    /// Chuỗi mã cổ phiếu chuẩn hóa viết hoa 3 ký tự (ví dụ: `"HPG"`).
     pub symbol: String,
 }
+
+/// Biểu diễn hợp đồng tương lai chỉ số VN30 phái sinh.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FutureContract {
+    /// Tài sản cơ sở (luôn là `"VN30F"`).
     pub underlying: String,
+    /// Hai chữ số cuối của năm đáo hạn (ví dụ: 24 cho năm 2024).
     pub year: u8,
+    /// Tháng đáo hạn từ 1 đến 12 (ví dụ: 9 cho tháng 9).
     pub month: u8,
+    /// Mã chuẩn tắc đầy đủ 9 ký tự (ví dụ: `"VN30F2409"`).
     pub canonical_symbol: String,
 }
+
+/// Biểu diễn chỉ số thị trường chuẩn (Index).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexSymbol {
+    /// Tên định danh chỉ số (`"VN30"` hoặc `"VNINDEX"`).
     pub symbol: String,
 }
 
 impl StockSymbol {
+    /// Phân tích và tạo mới `StockSymbol` từ chuỗi đầu vào thô.
+    ///
+    /// Hỗ trợ tự động bóc tách các tiền tố/hậu tố sàn giao dịch (như `"HOSE:HPG"`, `"HPG.HOSE"`, `"UPCOM:BSR"`).
+    ///
+    /// # Tham số:
+    /// - `symbol`: Chuỗi mã cổ phiếu cần phân tích.
+    ///
+    /// # Quy tắc thẩm định:
+    /// - Chuỗi không được rỗng.
+    /// - Bỏ qua các thành phần sàn: `HOSE`, `HNX`, `UPCOM`, `HSX`.
+    /// - Mã cổ phiếu thực tế phải có đúng 3 ký tự chữ cái ASCII (`A-Z`).
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidData`]: Nếu symbol rỗng hoặc không đúng định dạng 3 ký tự chữ cái.
     pub fn new(symbol: &str) -> Result<Self, MarketDataError> {
         const EXCHANGES: &[&str] = &["HOSE", "HNX", "UPCOM", "HSX"];
         if symbol.is_empty() {
@@ -56,6 +86,18 @@ impl StockSymbol {
 }
 
 impl FutureContract {
+    /// Phân tích và tạo mới `FutureContract` từ chuỗi ký hiệu hợp đồng tương lai chuẩn tắc.
+    ///
+    /// # Định dạng yêu cầu:
+    /// - Độ dài đúng 9 ký tự, bắt đầu bằng `"VN30F"`.
+    /// - 2 ký tự tiếp theo là năm đáo hạn (ví dụ: `"24"`).
+    /// - 2 ký tự cuối cùng là tháng đáo hạn từ `"01"` đến `"12"` (ví dụ: `"09"`).
+    ///
+    /// # Tham số:
+    /// - `raw`: Chuỗi mã hợp đồng (ví dụ: `"VN30F2409"`).
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidData`]: Nếu sai tiền tố, độ dài khác 9, hoặc năm/tháng không hợp lệ.
     pub fn new(raw: &str) -> Result<Self, MarketDataError> {
         let raw = raw.trim().to_uppercase();
 
@@ -95,6 +137,13 @@ impl FutureContract {
 }
 
 impl IndexSymbol {
+    /// Khởi tạo và thẩm định mã định danh chỉ số thị trường.
+    ///
+    /// # Tham số:
+    /// - `symbol`: Tên chỉ số (chỉ hỗ trợ `"VN30"` hoặc `"VNINDEX"`).
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidData`]: Nếu tên chỉ số nằm ngoài danh mục hỗ trợ.
     pub fn new(symbol: &str) -> Result<Self, MarketDataError> {
         let res = match symbol.trim().to_uppercase().as_str() {
             "VN30" => "VN30",
@@ -114,6 +163,18 @@ impl IndexSymbol {
 }
 
 impl Instrument {
+    /// Nhận diện tự động và phân tích chuỗi ký hiệu thành đối tượng [`Instrument`] chuẩn tắc.
+    ///
+    /// # Quy tắc phân loại:
+    /// - `"VN30"` hoặc `"VNINDEX"` -> [`Instrument::Index`]
+    /// - Bắt đầu bằng `"VN30F"` -> [`Instrument::IndexFuture`]
+    /// - Còn lại -> [`Instrument::Stock`] (3 ký tự)
+    ///
+    /// # Tham số:
+    /// - `s`: Chuỗi mã chứng khoán/chỉ số cần nhận diện.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidData`]: Nếu chuỗi không thỏa mãn bất kỳ định dạng công cụ tài chính nào.
     pub fn parse_canonical(s: &str) -> Result<Self, MarketDataError> {
         let s = s.trim().to_uppercase();
         if s == "VN30" || s == "VNINDEX" {
@@ -125,6 +186,10 @@ impl Instrument {
         }
     }
 
+    /// Trả về chuỗi ký hiệu chuẩn hóa đại diện cho công cụ tài chính.
+    ///
+    /// # Giá trị trả về:
+    /// - `&str`: Chuỗi ký hiệu (ví dụ: `"HPG"`, `"VN30F2409"`, `"VN30"`).
     pub fn as_str(&self) -> &str {
         match self {
             Instrument::Stock(symbol) => &symbol.symbol,

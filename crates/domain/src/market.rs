@@ -3,31 +3,54 @@ use serde::{Deserialize, Serialize};
 use crate::errors::MarketDataError;
 use crate::timestamp::MarketTimestamp;
 
+/// Cấu trúc dữ liệu biểu diễn một giao dịch khớp lệnh (Trade) thực tế trên thị trường.
+///
+/// Mỗi bản tin khớp lệnh mang tính chất duy nhất theo thời gian và không bao giờ bị loại bỏ trùng lặp.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trade {
+    /// Mã chứng khoán chuẩn hóa viết hoa (ví dụ: `"HPG"`, `"VN30F2409"`).
     pub symbol: String,
+    /// Mức giá khớp lệnh (phải là số hữu hạn và lớn hơn 0).
     pub price: f64,
+    /// Khối lượng khớp lệnh (phải là số hữu hạn và lớn hơn 0).
     pub volume: f64,
+    /// Mốc thời gian chuẩn hóa khi giao dịch phát sinh.
     pub timestamp: MarketTimestamp,
 }
 
+/// Cấu trúc dữ liệu biểu diễn sổ lệnh / mức giá chào mua và chào bán tốt nhất (BBO - Best Bid/Offer).
+///
+/// Các bản tin Quote cùng giá, cùng khối lượng và cùng timestamp có thể bị lọc trùng (deduplicated).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Quote {
+    /// Mã chứng khoán chuẩn hóa viết hoa.
     pub symbol: String,
+    /// Giá đặt mua tốt nhất (Best Bid Price).
     pub bid_price: f64,
+    /// Khối lượng đặt mua tương ứng.
     pub bid_vol: f64,
+    /// Giá đặt bán tốt nhất (Best Ask Price).
     pub ask_price: f64,
+    /// Khối lượng đặt bán tương ứng.
     pub ask_vol: f64,
+    /// Mốc thời gian chuẩn hóa của bản tin sổ lệnh.
     pub timestamp: MarketTimestamp,
 }
 
+/// Enum đóng gói các loại sự kiện dữ liệu thị trường chuẩn hóa được luân chuyển trong hệ thống.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MarketEvent {
+    /// Sự kiện khớp lệnh thực tế.
     Trade(Trade),
+    /// Sự kiện cập nhật giá chào mua/chào bán tốt nhất.
     Quote(Quote),
 }
 
 impl MarketEvent {
+    /// Trích xuất mốc thời gian phát sinh của sự kiện thị trường.
+    ///
+    /// # Giá trị trả về:
+    /// - [`MarketTimestamp`]: Mốc thời gian UTC chuẩn hóa của Trade hoặc Quote.
     pub fn timestamp(&self) -> MarketTimestamp {
         match self {
             MarketEvent::Trade(trade) => trade.timestamp,
@@ -37,6 +60,23 @@ impl MarketEvent {
 }
 
 impl Trade {
+    /// Khởi tạo và thẩm định tính hợp lệ của một giao dịch khớp lệnh (`Trade`).
+    ///
+    /// # Tham số:
+    /// - `symbol`: Mã chứng khoán (tự động cắt khoảng trắng và chuẩn hóa viết hoa).
+    /// - `price`: Mức giá khớp lệnh.
+    /// - `volume`: Khối lượng khớp lệnh.
+    /// - `timestamp`: Mốc thời gian chuẩn hóa của giao dịch.
+    ///
+    /// # Quy tắc thẩm định (Validation):
+    /// - Mã chứng khoán không được rỗng sau khi cắt khoảng trắng.
+    /// - Mức giá phải là số thực hữu hạn (`is_finite`) và lớn hơn 0.
+    /// - Khối lượng phải là số thực hữu hạn và lớn hơn 0.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidSymbol`]: Nếu chuỗi `symbol` rỗng.
+    /// - [`MarketDataError::InvalidPrice`]: Nếu `price <= 0` hoặc là NaN / Infinity.
+    /// - [`MarketDataError::InvalidVolume`]: Nếu `volume <= 0` hoặc là NaN / Infinity.
     pub fn new(
         symbol: String,
         price: f64,
@@ -68,6 +108,27 @@ impl Trade {
 }
 
 impl Quote {
+    /// Khởi tạo và thẩm định tính toàn vẹn của bản tin giá chào mua/chào bán (`Quote`).
+    ///
+    /// # Tham số:
+    /// - `symbol`: Mã chứng khoán.
+    /// - `bid_price`: Mức giá đặt mua tốt nhất (Best Bid).
+    /// - `bid_vol`: Khối lượng đặt mua tương ứng.
+    /// - `ask_price`: Mức giá đặt bán tốt nhất (Best Ask).
+    /// - `ask_vol`: Khối lượng đặt bán tương ứng.
+    /// - `timestamp`: Mốc thời gian chuẩn hóa.
+    ///
+    /// # Quy tắc thẩm định (Validation):
+    /// - Mã chứng khoán không được rỗng.
+    /// - Giá và khối lượng phải là số hữu hạn không âm (`>= 0.0`).
+    /// - Không cho phép cả `bid_price` và `ask_price` đồng thời bằng 0.
+    /// - Chặn hiện tượng chéo giá (Crossed Market): Nếu cả hai mức giá đều lớn hơn 0 thì bắt buộc `bid_price < ask_price`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidSymbol`]: Nếu `symbol` rỗng.
+    /// - [`MarketDataError::InvalidPrice`]: Nếu giá âm, không hữu hạn, hoặc cả hai mức giá đều bằng 0.
+    /// - [`MarketDataError::InvalidVolume`]: Nếu khối lượng âm hoặc không hữu hạn.
+    /// - [`MarketDataError::CrossedMarket`]: Nếu xảy ra chéo giá (`bid_price >= ask_price > 0.0`).
     pub fn new(
         symbol: String,
         bid_price: f64,
