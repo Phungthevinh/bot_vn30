@@ -11,3 +11,4 @@ dashmap.workspace = true
 chrono.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
+log.workspace = true

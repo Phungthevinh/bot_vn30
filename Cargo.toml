@@ -40,6 +40,7 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 # Data & Concurrency
 dashmap = "6.1"
 polars = { version = "0.46", features = ["lazy", "temporal", "parquet"] }
+log = "0.4"
 
 # Machine Learning
 smartcore = "0.5.3"

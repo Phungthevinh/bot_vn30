@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M4 — State Management
 - Current Module: `crates/state-store`
-- Current Task: M4-T01 — Latest market state
-- Overall Progress: 36%
-- Last Updated: 2026-09-25 23:00
+- Current Task: M4-T02 — OHLCV state
+- Overall Progress: 38%
+- Last Updated: 2026-09-27 21:40
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -37,7 +37,7 @@
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
 | M3 | Data Normalization | DONE | 100% | PASS | M3-T01..M3-T07 hoàn thành toàn bộ (67 unit + 9 QA tests PASS) |
-| M4 | State Management | NOT STARTED | 0% | — | Chuẩn bị triển khai M4-T01 |
+| M4 | State Management | IN PROGRESS | 17% | PASS | M4-T01 hoàn thành (5 unit tests PASS) |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
 | M7 | Feature Engineering | NOT STARTED | 0% | — | |
@@ -98,7 +98,7 @@
 ### M4 — STATE MANAGEMENT
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
-| M4-T01 | Latest market state | NOT STARTED | CRITICAL | — | — | |
+| M4-T01 | Latest market state | DONE | CRITICAL | PASS | 5 unit tests PASS | `SymbolState` & `MarketStateStore` với DashMap sharded locking, monotonic timestamp & 5 tests PASS |
 | M4-T02 | OHLCV state | NOT STARTED | CRITICAL | — | — | |
 | M4-T03 | Indicator state | NOT STARTED | HIGH | — | — | |
 | M4-T04 | Model state | NOT STARTED | HIGH | — | — | |
@@ -238,16 +238,16 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M4-T01 — Latest market state
-- Objective: Thiết kế và lưu trữ trạng thái giá mới nhất (Latest Market State) cho toàn bộ rổ VN30 và phái sinh, phục vụ tra cứu nhanh O(1) thread-safe.
+- Task: M4-T02 — OHLCV state
+- Objective: Thiết kế và lưu trữ các khung nến (OHLCV - Open, High, Low, Close, Volume) thời gian thực theo các khung thời gian (1m, 5m, 15m, 1h, 1D) phục vụ cho Feature Engineering và Indicators.
 - Expected Output:
-  1. `MarketStateStore` hoặc `LatestMarketState` lưu trữ giá bid/ask, trade, khối lượng mới nhất theo từng Symbol.
-  2. Hỗ trợ đọc/ghi đồng thời không gây lock contention nặng.
-  3. Cung cấp API snapshot trạng thái cho Downstream Modules.
+  1. Struct `OhlcvCandle` hoặc `Bar` lưu trữ dữ liệu nến chuẩn hóa.
+  2. Bounded Rolling Window cho nến theo từng Symbol, tránh tràn bộ nhớ RAM (OOM).
+  3. Cập nhật đóng nến (close bar) chính xác theo thời gian giao dịch thực tế.
 - Acceptance Criteria:
-  - [ ] Cập nhật trạng thái tức thời từ `MarketEvent`.
-  - [ ] Tra cứu O(1) thread-safe.
-  - [ ] Unit tests đầy đủ cho cập nhật song song và snapshot.
+  - [ ] Hỗ trợ gom nến từ luồng `Trade`.
+  - [ ] Bộ đệm nến có giới hạn dung lượng (Bounded Circular/Ring Buffer).
+  - [ ] Unit tests cho đóng nến, roll nến và boundary cases.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -274,6 +274,7 @@
 | 2026-09-21 | Bổ sung `write_tx: Arc<RwLock<Option<Sender<Message>>>>` và helper `send_message()`, tự động phản hồi Ping/Pong và reset `attempt = 0` khi handshake thành công | Giải quyết triệt để BUG-001 (drop write stream, không gửi pong, tê liệt subscribe động) và BUG-002 (terminate sớm khi có `max_retries`) | Đảm bảo kết nối WebSocket 2 chiều ổn định 24/7, tự phản hồi Heartbeat và hỗ trợ đăng ký mã động |
 | 2026-09-25 | Cơ chế Bounded Watermark Sequencer (Unified ingest, FIFO capacity eviction & monotonic watermark clamp) | Đảm bảo tính đơn điệu tăng dần của timestamp downstream, giới hạn RAM (không OOM) và tự sắp xếp các sự kiện out-of-order | Bảo vệ toàn vẹn dữ liệu cho Indicator & Risk Engine, chống lỗi tính toán do thời gian bị giật lùi |
 | 2026-09-25 | Sử dụng Monotonic Clock `Instant` kết hợp `watched_symbols` và phân cấp 4 trạng thái `SymbolLiveness` trong `StaleDataDetector` | Tránh hoàn toàn lỗi Clock Skew / Integer Underflow khi đồng hồ bot lệch sàn, phân định rõ ràng mã mất feed (`Stale`) và mã chưa có tin (`NeverSeen`) | Đảm bảo an toàn tài chính, phát hiện chính xác mã chết/treo, cung cấp API bulk scan cho Observability |
+| 2026-09-27 | Sử dụng Sharded DashMap với Monotonic Timestamp & Tách biệt Stale Check giữa Trade/Quote | Đảm bảo tra cứu O(1) lock-free, không drop nhầm Trade khi Quote update nhanh hơn, chống Time Inversion | Đảm bảo trạng thái thời gian thực nhất quán, đa luồng an toàn cho toàn bộ downstream crates |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -305,6 +306,7 @@
 | 2026-09-21 | Fix QA BUG-001 & BUG-002: Bi-directional WebSocket write stream & Clean Reconnect Lifecycle | PASS | PASS | 147 unit & QA tests PASS (workspace) | `MarketConnectionManager` write channel & retry reset |
 | 2026-09-25 | M3-T06: Out-of-order event handling (EventSequencer, Bounded Watermark & Latency Window) | PASS | PASS | 4 unit tests PASS (61 unit & 9 QA tests trong crate, workspace PASS) | Ingest, flush_ready, flush_all & eviction |
 | 2026-09-25 | M3-T07: Stale data detection (StaleDataDetector, Monotonic Instant, 4-tier SymbolLiveness & bulk scan) | PASS | PASS | 6 unit tests PASS (67 unit & 9 QA tests trong crate, workspace PASS) | Hoàn thành toàn bộ Milestone M3 |
+| 2026-09-27 | M4-T01: Latest market state (SymbolState, MarketStateStore DashMap & Sharded Concurrency) | PASS | PASS | 5 unit tests PASS (workspace PASS) | Hoàn thành M4-T01 |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.

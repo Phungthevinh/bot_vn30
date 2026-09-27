@@ -17,6 +17,19 @@ pub enum ConfigError {
     MissingEnvVar(String),
 }
 
+/// Tập hợp các lỗi liên quan đến trạng thái và tính toàn vẹn của dữ liệu giá trong State Store.
+#[derive(Error, Debug, PartialEq)]
+pub enum PriceDataError {
+    /// Dữ liệu thị trường đến muộn hơn mốc thời gian hiện tại đã lưu của mã (Stale Data / Out-of-order).
+    /// Chứa timestamp Unix mili-giây của sự kiện bị trễ để phục vụ ghi log và truy vết.
+    #[error("Dữ liệu thị trường quá hạn: {0}")]
+    StaleData(i64),
+
+    /// Dữ liệu thị trường có cấu trúc hoặc giá trị không hợp lệ (ví dụ: khối lượng âm, giá NaN/Inf).
+    #[error("Dữ liệu thị trường không hợp lệ: {0}")]
+    InvalidData(String),
+}
+
 /// Tập hợp các lỗi phát sinh trong tầng thu nhận và xử lý dữ liệu thị trường (Market Data Ingestion).
 #[derive(Error, Debug)]
 pub enum MarketDataError {
