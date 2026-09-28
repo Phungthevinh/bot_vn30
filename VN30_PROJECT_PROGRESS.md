@@ -9,7 +9,7 @@
 - Current Module: `crates/state-store`
 - Current Task: M4-T02 — OHLCV state
 - Overall Progress: 38%
-- Last Updated: 2026-09-27 21:40
+- Last Updated: 2026-09-28 23:58
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -37,7 +37,7 @@
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
 | M3 | Data Normalization | DONE | 100% | PASS | M3-T01..M3-T07 hoàn thành toàn bộ (67 unit + 9 QA tests PASS) |
-| M4 | State Management | IN PROGRESS | 17% | PASS | M4-T01 hoàn thành (5 unit tests PASS) |
+| M4 | State Management | IN PROGRESS | 17% | PASS | M4-T01 hoàn thành, M4-T02 đang triển khai OhlcvStateStore |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
 | M7 | Feature Engineering | NOT STARTED | 0% | — | |
@@ -99,7 +99,7 @@
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
 | M4-T01 | Latest market state | DONE | CRITICAL | PASS | 5 unit tests PASS | `SymbolState` & `MarketStateStore` với DashMap sharded locking, monotonic timestamp & 5 tests PASS |
-| M4-T02 | OHLCV state | NOT STARTED | CRITICAL | — | — | |
+| M4-T02 | OHLCV state | IN PROGRESS | CRITICAL | PASS | 12 tests PASS (7 Candle + 5 SymbolOhlcv) | Đang hoàn thiện OhlcvStateStore đa luồng |
 | M4-T03 | Indicator state | NOT STARTED | HIGH | — | — | |
 | M4-T04 | Model state | NOT STARTED | HIGH | — | — | |
 | M4-T05 | Signal state | NOT STARTED | HIGH | — | — | |
@@ -245,9 +245,10 @@
   2. Bounded Rolling Window cho nến theo từng Symbol, tránh tràn bộ nhớ RAM (OOM).
   3. Cập nhật đóng nến (close bar) chính xác theo thời gian giao dịch thực tế.
 - Acceptance Criteria:
-  - [ ] Hỗ trợ gom nến từ luồng `Trade`.
-  - [ ] Bộ đệm nến có giới hạn dung lượng (Bounded Circular/Ring Buffer).
-  - [ ] Unit tests cho đóng nến, roll nến và boundary cases.
+  - [x] Hỗ trợ gom nến từ luồng `Trade` (SymbolOhlcv).
+  - [x] Bộ đệm nến có giới hạn dung lượng (Bounded Circular/Ring Buffer).
+  - [ ] Bộ quản lý toàn thị trường đa luồng (OhlcvStateStore) cho toàn bộ rổ VN30.
+  - [x] Unit tests cho đóng nến, roll nến và boundary cases.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -275,6 +276,7 @@
 | 2026-09-25 | Cơ chế Bounded Watermark Sequencer (Unified ingest, FIFO capacity eviction & monotonic watermark clamp) | Đảm bảo tính đơn điệu tăng dần của timestamp downstream, giới hạn RAM (không OOM) và tự sắp xếp các sự kiện out-of-order | Bảo vệ toàn vẹn dữ liệu cho Indicator & Risk Engine, chống lỗi tính toán do thời gian bị giật lùi |
 | 2026-09-25 | Sử dụng Monotonic Clock `Instant` kết hợp `watched_symbols` và phân cấp 4 trạng thái `SymbolLiveness` trong `StaleDataDetector` | Tránh hoàn toàn lỗi Clock Skew / Integer Underflow khi đồng hồ bot lệch sàn, phân định rõ ràng mã mất feed (`Stale`) và mã chưa có tin (`NeverSeen`) | Đảm bảo an toàn tài chính, phát hiện chính xác mã chết/treo, cung cấp API bulk scan cho Observability |
 | 2026-09-27 | Sử dụng Sharded DashMap với Monotonic Timestamp & Tách biệt Stale Check giữa Trade/Quote | Đảm bảo tra cứu O(1) lock-free, không drop nhầm Trade khi Quote update nhanh hơn, chống Time Inversion | Đảm bảo trạng thái thời gian thực nhất quán, đa luồng an toàn cho toàn bộ downstream crates |
+| 2026-09-28 | Tách biệt Struct Candle/Timeframe (domain) và SymbolOhlcv (state-store) với Bounded FIFO Rolling Window | Đảm bảo gom nến độc lập, căn gióng thời gian chuẩn xác và chống tràn RAM (OOM) | Downstream (Indicators, ML) nhận nến chuẩn xác khi `is_closed = true` |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |
@@ -307,6 +309,7 @@
 | 2026-09-25 | M3-T06: Out-of-order event handling (EventSequencer, Bounded Watermark & Latency Window) | PASS | PASS | 4 unit tests PASS (61 unit & 9 QA tests trong crate, workspace PASS) | Ingest, flush_ready, flush_all & eviction |
 | 2026-09-25 | M3-T07: Stale data detection (StaleDataDetector, Monotonic Instant, 4-tier SymbolLiveness & bulk scan) | PASS | PASS | 6 unit tests PASS (67 unit & 9 QA tests trong crate, workspace PASS) | Hoàn thành toàn bộ Milestone M3 |
 | 2026-09-27 | M4-T01: Latest market state (SymbolState, MarketStateStore DashMap & Sharded Concurrency) | PASS | PASS | 5 unit tests PASS (workspace PASS) | Hoàn thành M4-T01 |
+| 2026-09-28 | M4-T02 (Part 1): Candle, Timeframe & SymbolOhlcv bounded rolling window | PASS | PASS | 12 unit tests PASS (227 tests trong workspace) | Đang tiếp tục triển khai OhlcvStateStore đa luồng |
 
 ## 10. NEXT ACTIONS
 1. Xác định task tiếp theo.

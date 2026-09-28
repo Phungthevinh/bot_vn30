@@ -37,6 +37,63 @@ pub struct Quote {
     pub timestamp: MarketTimestamp,
 }
 
+/// Cấu trúc dữ liệu biểu diễn một thanh nến (OHLCV) chuẩn hóa trong hệ thống.
+///
+/// Nến tổng hợp dữ liệu giao dịch trong một khung thời gian cố định (ví dụ 1m, 5m, 1h),
+/// phục vụ cho việc tính toán các chỉ báo kỹ thuật (RSI, MACD) và trích xuất đặc trưng ML.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Candle {
+    /// Mã chứng khoán chuẩn hóa viết hoa (ví dụ: `"HPG"`, `"VN30F2409"`).
+    pub symbol: String,
+    /// Giá mở cửa (Open Price).
+    pub open: f64,
+    /// Giá cao nhất trong phiên nến (High Price).
+    pub high: f64,
+    /// Giá thấp nhất trong phiên nến (Low Price).
+    pub low: f64,
+    /// Giá đóng cửa / giá khớp lệnh gần nhất (Close Price).
+    pub close: f64,
+    /// Tổng khối lượng khớp lệnh tích lũy trong phiên nến (Volume >= 0.0).
+    pub volume: f64,
+    /// Mốc thời gian bắt đầu của phiên nến.
+    pub start_time: MarketTimestamp,
+    /// Mốc thời gian kết thúc của phiên nến.
+    pub end_time: MarketTimestamp,
+    /// Trạng thái nến: `true` nếu đã đóng nến hoàn chỉnh; `false` nếu đang trong phiên nến.
+    pub is_closed: bool,
+}
+
+/// Khung thời gian tổng hợp nến (OHLCV) được hỗ trợ trong hệ thống.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Timeframe {
+    /// Khung 1 phút (60 giây).
+    M1,
+    /// Khung 15 phút (900 giây).
+    M15,
+    /// Khung 1 giờ (3.600 giây).
+    H1,
+    /// Khung 1 ngày (86.400 giây).
+    D1,
+}
+
+impl Timeframe {
+    /// Trả về độ dài khung thời gian theo đơn vị PHÚT.
+    #[inline]
+    pub fn minutes(&self) -> u32 {
+        match self {
+            Timeframe::M1 => 1,
+            Timeframe::M15 => 15,
+            Timeframe::H1 => 60,
+            Timeframe::D1 => 60 * 24,
+        }
+    }
+
+    /// Trả về độ dài khung thời gian theo đơn vị GIÂY.
+    #[inline]
+    pub fn duration_secs(&self) -> u64 {
+        (self.minutes() as u64) * 60
+    }
+}
 /// Enum đóng gói các loại sự kiện dữ liệu thị trường chuẩn hóa được luân chuyển trong hệ thống.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MarketEvent {
@@ -182,6 +239,92 @@ impl Quote {
             ask_price,
             ask_vol,
             timestamp,
+        })
+    }
+}
+
+impl Candle {
+    /// Khởi tạo và thẩm định tính toàn vẹn toán học của một thanh nến mới.
+    ///
+    /// # Tham số:
+    /// - `symbol`: Mã chứng khoán (tự động cắt khoảng trắng và viết hoa).
+    /// - `open`, `high`, `low`, `close`: Các mức giá trong phiên nến (phải là số hữu hạn > 0.0).
+    /// - `volume`: Tổng khối lượng khớp lệnh (phải là số hữu hạn >= 0.0).
+    /// - `start_time`: Thời điểm mở nến.
+    /// - `end_time`: Thời điểm đóng nến (bắt buộc `start_time < end_time`).
+    ///
+    /// # Ràng buộc bất biến (Invariants):
+    /// - Mã chứng khoán không được rỗng sau khi trim.
+    /// - Các mức giá phải là số thực hữu hạn và > 0.0.
+    /// - Ràng buộc hình thái nến: `high >= open`, `high >= close`, `low <= open`, `low <= close`.
+    /// - Khối lượng `volume` phải là số hữu hạn và >= 0.0.
+    /// - Thời gian: `start_time < end_time`.
+    ///
+    /// # Lỗi trả về:
+    /// - [`MarketDataError::InvalidSymbol`]: Nếu chuỗi `symbol` rỗng.
+    /// - [`MarketDataError::InvalidPrice`]: Nếu giá <= 0.0, NaN hoặc vi phạm cấu trúc nến (`high < low`).
+    /// - [`MarketDataError::InvalidVolume`]: Nếu khối lượng < 0.0 hoặc NaN.
+    /// - [`MarketDataError::InvalidTime`]: Nếu `start_time >= end_time`.
+    pub fn new(
+        symbol: String,
+        open: f64,
+        high: f64,
+        low: f64,
+        close: f64,
+        volume: f64,
+        start_time: MarketTimestamp,
+        end_time: MarketTimestamp,
+    ) -> Result<Self, MarketDataError> {
+        if symbol.trim().is_empty() {
+            return Err(MarketDataError::InvalidSymbol(
+                "Mã chứng khoán không được rỗng".to_string(),
+            ));
+        }
+        if !open.is_finite() || open <= 0.0 {
+            return Err(MarketDataError::InvalidPrice(
+                "Giá mở cửa không hợp lệ".to_string(),
+            ));
+        }
+        if !high.is_finite() || high <= 0.0 {
+            return Err(MarketDataError::InvalidPrice(
+                "Giá cao nhất không hợp lệ".to_string(),
+            ));
+        }
+        if !low.is_finite() || low <= 0.0 {
+            return Err(MarketDataError::InvalidPrice(
+                "Giá thấp nhất không hợp lệ".to_string(),
+            ));
+        }
+        if !close.is_finite() || close <= 0.0 {
+            return Err(MarketDataError::InvalidPrice(
+                "Giá đóng cửa không hợp lệ".to_string(),
+            ));
+        }
+        if !volume.is_finite() || volume < 0.0 {
+            return Err(MarketDataError::InvalidVolume(
+                "Khối lượng không hợp lệ".to_string(),
+            ));
+        }
+        if start_time >= end_time {
+            return Err(MarketDataError::InvalidTime(
+                "Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc".to_string(),
+            ));
+        }
+        if high < open || high < close || low > open || low > close {
+            return Err(MarketDataError::InvalidPrice(
+                "Giá cao nhất phải lớn hơn hoặc bằng giá mở cửa và giá đóng cửa, giá thấp nhất phải nhỏ hơn hoặc bằng giá mở cửa và giá đóng cửa".to_string(),
+            ));
+        }
+        Ok(Self {
+            symbol: symbol.trim().to_uppercase(),
+            open,
+            high,
+            low,
+            close,
+            volume,
+            start_time,
+            end_time,
+            is_closed: false,
         })
     }
 }
@@ -405,5 +548,272 @@ mod tests {
         let q_flr = quote_floor.unwrap();
         assert_eq!(q_flr.bid_price, 0.0);
         assert_eq!(q_flr.ask_price, 26000.0);
+    }
+
+    #[test]
+    fn test_candle_valid_creation_and_normalization() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        // 1. Nến xanh (Bullish) chuẩn
+        let candle = Candle::new(
+            "  hpg  ".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            50000.0,
+            t1,
+            t2,
+        )
+        .expect("Nến hợp lệ");
+
+        assert_eq!(candle.symbol, "HPG");
+        assert_eq!(candle.open, 28000.0);
+        assert_eq!(candle.high, 29000.0);
+        assert_eq!(candle.low, 27500.0);
+        assert_eq!(candle.close, 28500.0);
+        assert_eq!(candle.volume, 50000.0);
+        assert_eq!(candle.start_time, t1);
+        assert_eq!(candle.end_time, t2);
+        assert!(!candle.is_closed);
+
+        // 2. Nến không có giao dịch (volume = 0.0) vẫn hợp lệ
+        let zero_vol_candle = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            28000.0,
+            28000.0,
+            28000.0,
+            0.0,
+            t1,
+            t2,
+        );
+        assert!(zero_vol_candle.is_ok());
+    }
+
+    #[test]
+    fn test_candle_invalid_symbol() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        let res = Candle::new(
+            "   ".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(res, Err(MarketDataError::InvalidSymbol(_))));
+    }
+
+    #[test]
+    fn test_candle_invalid_prices() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        // Giá âm
+        let res_neg = Candle::new(
+            "HPG".to_string(),
+            -28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(res_neg, Err(MarketDataError::InvalidPrice(_))));
+
+        // Giá bằng 0.0
+        let res_zero = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            0.0,
+            28500.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(res_zero, Err(MarketDataError::InvalidPrice(_))));
+
+        // Giá NaN
+        let res_nan = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            f64::NAN,
+            27500.0,
+            28500.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(res_nan, Err(MarketDataError::InvalidPrice(_))));
+    }
+
+    #[test]
+    fn test_candle_invalid_geometry() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        // High < Open
+        let res_high_less_open = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            27000.0,
+            26000.0,
+            26500.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(
+            res_high_less_open,
+            Err(MarketDataError::InvalidPrice(_))
+        ));
+
+        // High < Close
+        let res_high_less_close = Candle::new(
+            "HPG".to_string(),
+            27000.0,
+            28000.0,
+            26000.0,
+            28500.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(
+            res_high_less_close,
+            Err(MarketDataError::InvalidPrice(_))
+        ));
+
+        // Low > Open
+        let res_low_greater_open = Candle::new(
+            "HPG".to_string(),
+            27000.0,
+            29000.0,
+            27500.0,
+            28000.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(
+            res_low_greater_open,
+            Err(MarketDataError::InvalidPrice(_))
+        ));
+
+        // Low > Close
+        let res_low_greater_close = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            27000.0,
+            1000.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(
+            res_low_greater_close,
+            Err(MarketDataError::InvalidPrice(_))
+        ));
+    }
+
+    #[test]
+    fn test_candle_invalid_volume() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        // Khối lượng âm
+        let res_neg_vol = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            -10.0,
+            t1,
+            t2,
+        );
+        assert!(matches!(
+            res_neg_vol,
+            Err(MarketDataError::InvalidVolume(_))
+        ));
+
+        // Khối lượng NaN
+        let res_nan_vol = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            f64::NAN,
+            t1,
+            t2,
+        );
+        assert!(matches!(
+            res_nan_vol,
+            Err(MarketDataError::InvalidVolume(_))
+        ));
+    }
+
+    #[test]
+    fn test_candle_invalid_time() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        // start_time == end_time
+        let res_equal = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            1000.0,
+            t1,
+            t1,
+        );
+        assert!(matches!(res_equal, Err(MarketDataError::InvalidTime(_))));
+
+        // start_time > end_time
+        let res_reverse = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            1000.0,
+            t2,
+            t1,
+        );
+        assert!(matches!(res_reverse, Err(MarketDataError::InvalidTime(_))));
+    }
+
+    #[test]
+    fn test_candle_serde_roundtrip() {
+        let t1 = MarketTimestamp::from_epoch_secs(1725300000).expect("Hợp lệ");
+        let t2 = MarketTimestamp::from_epoch_secs(1725300060).expect("Hợp lệ");
+
+        let candle = Candle::new(
+            "HPG".to_string(),
+            28000.0,
+            29000.0,
+            27500.0,
+            28500.0,
+            50000.0,
+            t1,
+            t2,
+        )
+        .unwrap();
+        let json = serde_json::to_string(&candle).expect("Serialize thành công");
+        let restored: Candle = serde_json::from_str(&json).expect("Deserialize thành công");
+
+        assert_eq!(candle, restored);
     }
 }

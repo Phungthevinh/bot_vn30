@@ -55,6 +55,8 @@ pub enum MarketDataError {
     InvalidTimestamp(String),
     #[error("Thị trường bị chéo giá (Crossed Market) cho mã '{symbol}': bid {bid} >= ask {ask}")]
     CrossedMarket { symbol: String, bid: f64, ask: f64 },
+    #[error("Thời gian không hợp lệ: {0}")]
+    InvalidTime(String),
 }
 
 /// Tập hợp các lỗi trong quá trình tính toán các chỉ báo kỹ thuật (RSI, MACD, Bollinger Bands...).
