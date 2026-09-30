@@ -32,15 +32,37 @@ fn test_qa_dedup_trades_flag_completely_ignored() {
     assert!(!dup1);
 
     let dup2 = dedup.is_duplicate(&event);
-    println!("Trade duplicate check result with dedup_trades=true: {}", dup2);
-    assert!(!dup2, "CONFIRMED: Trade is never deduplicated even when dedup_trades is true!");
+    println!(
+        "Trade duplicate check result with dedup_trades=true: {}",
+        dup2
+    );
+    assert!(
+        !dup2,
+        "CONFIRMED: Trade is never deduplicated even when dedup_trades is true!"
+    );
     assert_eq!(dedup.dropped_trades(), 0);
 }
 
 #[test]
 fn test_qa_dedup_negative_zero_hash_discrepancy() {
-    let q1 = Quote::new("HPG".to_string(), 28000.0, 100.0, 0.0, 0.0, make_ts(1726000000)).unwrap();
-    let q2 = Quote::new("HPG".to_string(), 28000.0, 100.0, -0.0, -0.0, make_ts(1726000000)).unwrap();
+    let q1 = Quote::new(
+        "HPG".to_string(),
+        28000.0,
+        100.0,
+        0.0,
+        0.0,
+        make_ts(1726000000),
+    )
+    .unwrap();
+    let q2 = Quote::new(
+        "HPG".to_string(),
+        28000.0,
+        100.0,
+        -0.0,
+        -0.0,
+        make_ts(1726000000),
+    )
+    .unwrap();
 
     let fp1 = EventDeduplicator::fingerprint(&q1);
     let fp2 = EventDeduplicator::fingerprint(&q2);
@@ -57,7 +79,10 @@ fn test_qa_dedup_negative_zero_hash_discrepancy() {
     assert!(!dedup.is_duplicate(&e1));
     let dup = dedup.is_duplicate(&e2);
     println!("e2 is duplicate of e1: {}", dup);
-    assert!(!dup, "CONFIRMED: -0.0 causes duplicate quote to NOT be detected!");
+    assert!(
+        !dup,
+        "CONFIRMED: -0.0 causes duplicate quote to NOT be detected!"
+    );
 }
 
 #[test]
@@ -136,7 +161,11 @@ async fn test_qa_reconnect_manager_premature_termination_on_max_retries() {
     let server_handle = tokio::spawn(async move {
         if let Ok((stream, _)) = listener.accept().await {
             let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
-            let _ = ws.send(Message::Text("{\"type\":\"heartbeat\",\"timestamp\":1724900000}".into())).await;
+            let _ = ws
+                .send(Message::Text(
+                    "{\"type\":\"heartbeat\",\"timestamp\":1724900000}".into(),
+                ))
+                .await;
             tokio::time::sleep(Duration::from_millis(50)).await;
             let _ = ws.close(None).await;
         }
@@ -151,14 +180,7 @@ async fn test_qa_reconnect_manager_premature_termination_on_max_retries() {
     let mut policy = ReconnectPolicy::new(10, 100, 2.0);
     policy.max_retries = Some(1);
 
-    let mut manager = MarketConnectionManager::new(
-        client,
-        auth,
-        sub,
-        health,
-        tx,
-        policy,
-    );
+    let mut manager = MarketConnectionManager::new(client, auth, sub, health, tx, policy);
 
     let manager_task = tokio::spawn(async move {
         manager.run().await;
@@ -206,14 +228,7 @@ async fn test_qa_server_ping_ignored_and_drops_connection() {
     let client = WebSocketClient::new(ws_url, 100);
     let policy = ReconnectPolicy::new(10, 100, 2.0);
 
-    let mut manager = MarketConnectionManager::new(
-        client,
-        auth,
-        sub,
-        health,
-        tx,
-        policy,
-    );
+    let mut manager = MarketConnectionManager::new(client, auth, sub, health, tx, policy);
 
     let mut ws_read = manager.connect_and_handshake().await.unwrap();
     let msg = ws_read.next().await;

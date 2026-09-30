@@ -3,4 +3,4 @@ pub mod latest;
 pub mod ohlcv;
 
 pub use latest::{MarketStateStore, SymbolState};
-pub use ohlcv::SymbolOhlcv;
+pub use ohlcv::{default_timeframe_config, OhlcvStateStore, SymbolOhlcv};

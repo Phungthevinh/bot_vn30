@@ -164,13 +164,7 @@ mod tests {
     }
 
     fn make_sample_trade(symbol: &str, price: f64, volume: f64, secs: i64) -> Trade {
-        Trade::new(
-            symbol.to_string(),
-            price,
-            volume,
-            make_timestamp(secs),
-        )
-        .expect("Trade hợp lệ")
+        Trade::new(symbol.to_string(), price, volume, make_timestamp(secs)).expect("Trade hợp lệ")
     }
 
     #[test]
@@ -256,6 +250,9 @@ mod tests {
     fn test_fingerprint_deterministic() {
         let q1 = make_sample_quote("HPG", 28000.0, 28100.0, 1726000000);
         let q2 = make_sample_quote("HPG", 28000.0, 28100.0, 1726000000);
-        assert_eq!(EventDeduplicator::fingerprint(&q1), EventDeduplicator::fingerprint(&q2));
+        assert_eq!(
+            EventDeduplicator::fingerprint(&q1),
+            EventDeduplicator::fingerprint(&q2)
+        );
     }
 }

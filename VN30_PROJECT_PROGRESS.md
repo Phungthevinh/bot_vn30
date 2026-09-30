@@ -7,9 +7,9 @@
 - Language: 100% Rust
 - Current Milestone: M4 — State Management
 - Current Module: `crates/state-store`
-- Current Task: M4-T02 — OHLCV state
-- Overall Progress: 38%
-- Last Updated: 2026-09-28 23:58
+- Current Task: M4-T03 — Indicator state
+- Overall Progress: 39%
+- Last Updated: 2026-09-30 10:58
 - Overall Status: `IN PROGRESS`
 
 ### Status Legend
@@ -37,7 +37,7 @@
 | M1 | Configuration & Logging | DONE | 100% | PASS | M1-T01..M1-T05 hoàn thành toàn bộ (49 unit tests) |
 | M2 | Market Data Connection | DONE | 100% | PASS | M2-T01..M2-T08 hoàn thành toàn bộ (36 unit tests) |
 | M3 | Data Normalization | DONE | 100% | PASS | M3-T01..M3-T07 hoàn thành toàn bộ (67 unit + 9 QA tests PASS) |
-| M4 | State Management | IN PROGRESS | 17% | PASS | M4-T01 hoàn thành, M4-T02 đang triển khai OhlcvStateStore |
+| M4 | State Management | IN PROGRESS | 33% | PASS | M4-T01, M4-T02 hoàn thành toàn bộ (14 unit tests trong state-store) |
 | M5 | Technical Indicators | NOT STARTED | 0% | — | |
 | M6 | Beta & Risk Metrics | NOT STARTED | 0% | — | |
 | M7 | Feature Engineering | NOT STARTED | 0% | — | |
@@ -99,7 +99,7 @@
 | ID | Task | Status | Priority | Review | Tests | Notes |
 |---|---|---|---|---|---|---|
 | M4-T01 | Latest market state | DONE | CRITICAL | PASS | 5 unit tests PASS | `SymbolState` & `MarketStateStore` với DashMap sharded locking, monotonic timestamp & 5 tests PASS |
-| M4-T02 | OHLCV state | IN PROGRESS | CRITICAL | PASS | 12 tests PASS (7 Candle + 5 SymbolOhlcv) | Đang hoàn thiện OhlcvStateStore đa luồng |
+| M4-T02 | OHLCV state | DONE | CRITICAL | PASS | 14 tests PASS (5 SymbolState + 5 SymbolOhlcv + 4 OhlcvStateStore) | `SymbolOhlcv` & `OhlcvStateStore` đa khung thời gian với Sharded Locking, FIFO buffer & zero-allocation reads |
 | M4-T03 | Indicator state | NOT STARTED | HIGH | — | — | |
 | M4-T04 | Model state | NOT STARTED | HIGH | — | — | |
 | M4-T05 | Signal state | NOT STARTED | HIGH | — | — | |
@@ -238,17 +238,17 @@
 | M17-T07 | Production readiness review | NOT STARTED | CRITICAL | — | — | |
 
 ## 5. CURRENT TASK
-- Task: M4-T02 — OHLCV state
-- Objective: Thiết kế và lưu trữ các khung nến (OHLCV - Open, High, Low, Close, Volume) thời gian thực theo các khung thời gian (1m, 5m, 15m, 1h, 1D) phục vụ cho Feature Engineering và Indicators.
+- Task: M4-T03 — Indicator state
+- Objective: Thiết kế và lưu trữ trạng thái các chỉ báo kỹ thuật (RSI, MACD, Bollinger Bands, Moving Averages...) tính toán thời gian thực theo từng Symbol và Timeframe phục vụ cho Feature Engineering và Signal Engine.
 - Expected Output:
-  1. Struct `OhlcvCandle` hoặc `Bar` lưu trữ dữ liệu nến chuẩn hóa.
-  2. Bounded Rolling Window cho nến theo từng Symbol, tránh tràn bộ nhớ RAM (OOM).
-  3. Cập nhật đóng nến (close bar) chính xác theo thời gian giao dịch thực tế.
+  1. Struct lưu trữ trạng thái Indicator cho một mã theo từng khung thời gian.
+  2. Bảng băm đa luồng quản lý Indicator toàn rổ VN30 an toàn, lock-free hoặc sharded locking.
+  3. Cơ chế cập nhật giá trị chỉ báo khi có nến mới đóng (`Candle`) hoặc cập nhật real-time theo tick.
 - Acceptance Criteria:
-  - [x] Hỗ trợ gom nến từ luồng `Trade` (SymbolOhlcv).
-  - [x] Bộ đệm nến có giới hạn dung lượng (Bounded Circular/Ring Buffer).
-  - [ ] Bộ quản lý toàn thị trường đa luồng (OhlcvStateStore) cho toàn bộ rổ VN30.
-  - [x] Unit tests cho đóng nến, roll nến và boundary cases.
+  - [ ] Struct `IndicatorState` / `SymbolIndicators` đóng gói các chỉ báo kỹ thuật.
+  - [ ] Bounded rolling buffer cho lịch sử indicator (nếu cần tính toán lookback).
+  - [ ] Hỗ trợ đa khung thời gian (M1, M15, H1, D1) tương thích với `OhlcvStateStore`.
+  - [ ] Unit tests cho khởi tạo, cập nhật chỉ báo và tra cứu concurrent đa luồng.
 - Blockers: Không có
 
 ## 6. ACTIVE ISSUES / BLOCKERS
@@ -277,6 +277,41 @@
 | 2026-09-25 | Sử dụng Monotonic Clock `Instant` kết hợp `watched_symbols` và phân cấp 4 trạng thái `SymbolLiveness` trong `StaleDataDetector` | Tránh hoàn toàn lỗi Clock Skew / Integer Underflow khi đồng hồ bot lệch sàn, phân định rõ ràng mã mất feed (`Stale`) và mã chưa có tin (`NeverSeen`) | Đảm bảo an toàn tài chính, phát hiện chính xác mã chết/treo, cung cấp API bulk scan cho Observability |
 | 2026-09-27 | Sử dụng Sharded DashMap với Monotonic Timestamp & Tách biệt Stale Check giữa Trade/Quote | Đảm bảo tra cứu O(1) lock-free, không drop nhầm Trade khi Quote update nhanh hơn, chống Time Inversion | Đảm bảo trạng thái thời gian thực nhất quán, đa luồng an toàn cho toàn bộ downstream crates |
 | 2026-09-28 | Tách biệt Struct Candle/Timeframe (domain) và SymbolOhlcv (state-store) với Bounded FIFO Rolling Window | Đảm bảo gom nến độc lập, căn gióng thời gian chuẩn xác và chống tràn RAM (OOM) | Downstream (Indicators, ML) nhận nến chuẩn xác khi `is_closed = true` |
+| 2026-09-30 | Sử dụng `DashMap<String, HashMap<Timeframe, SymbolOhlcv>>` cho `OhlcvStateStore` kết hợp Sharded Locking & Zero-Allocation Reads | Đảm bảo nguyên tử theo mã khi gom lệnh đa khung thời gian, duyệt deterministic theo `timeframe_config`, loại bỏ 100% Deep Clone buffer nến khi tra cứu | Tối ưu thông lượng nạp trade, hỗ trợ multi-timeframe nhất quán, an toàn đa luồng 100% cho Indicators & Features |
+
+## 8. ARCHITECTURE CHANGES
+| Date | Change | Previous | New | Reason | Impact |
+|---|---|---|---|---|---|
+| — | Chưa có | — | — | — | — |
+
+## 9. COMPLETED WORK LOG
+> Chỉ append lịch sử; không xóa các mục đã hoàn thành.
+
+| Date | Task | Result | Review | Tests | Commit |
+|---|---|---|---|---|---|
+| 2026-08-24 | M0: Project Foundation (Workspace & Dependencies) | PASS | PASS | cargo check PASS | Initial setup |
+| 2026-08-26 | M1-T01: Configuration Loader & Domain Error Model | PASS | PASS | 3 unit tests PASS | `AppConfig::from_str`, `from_file`, `ConfigError` |
+| 2026-08-26 | M1-T02: Environment handling & Secret Loading | PASS | PASS | 3 unit tests PASS | `TelegramConfig::load_bot_token` with env resolution & validation |
+| 2026-08-26 | M1-T03: Structured logging | PASS | PASS | 1 unit test PASS | `init_logging` with fallback EnvFilter & try_init |
+| 2026-08-26 | M1-T04: Error model (thiserror & Domain taxonomy) | PASS | PASS | 2 unit tests PASS | `DomainError` taxonomy & From trait tests |
+| 2026-08-27 | M1-T05: Runtime configuration validation | PASS | PASS | 41 unit tests PASS | Hoàn thành validate toàn diện cho 9 config structs |
+| 2026-08-27 | M2-T01: WebSocket client | PASS | PASS | 3 unit tests PASS | `WebSocketClient`, Bounded channel streaming, 3 mock server tests |
+| 2026-08-28 | M2-T02: Authentication handling | PASS | PASS | 9 unit tests PASS | `DefaultAuthenticator`, `AuthMethod`, JSON auth payload, response verification & error handling |
+| 2026-08-29 | M2-T03: Subscription management | PASS | PASS | 4 unit tests PASS | `SubscriptionManager`, dynamic subscribe/unsubscribe, deduplication & resubscribe frame |
+| 2026-08-30 | M2-T04: Message parsing | PASS | PASS | 8 unit tests PASS | `MarketDataParser`, Tagged Enum deserialization, Trade/Quote/Heartbeat/Error parsing |
+| 2026-08-30 | M2-T05: Connection health check | PASS | PASS | 6 unit tests PASS | `HealthMonitor`, AtomicU64 lock-free tracking, 4-tier health states (`Dead`, `Stale`, `HeartbeatMissed`, `Healthy`) |
+| 2026-09-01 | M2-T06..M2-T08: Reconnect mechanism, Resubscribe & Exponential Backoff Policy | PASS | PASS | 6 unit tests PASS | `MarketConnectionManager`, `ReconnectPolicy`, `connect_and_handshake`, biased `select!` loop (36 tests trong crate) |
+| 2026-09-02 | M3-T01: Raw message → normalized event | PASS | PASS | 13 unit tests PASS | Struct `Trade`/`Quote`/`MarketEvent` trong `domain::market` & `try_into_market_event` trong `market-data` (99 tests trong workspace) |
+| 2026-09-04 | M3-T02: Symbol mapping & Canonical Normalization | PASS | PASS | 12 unit tests PASS | Triển khai Instrument (Stock, Future, Index) trong domain & SymbolMapper (Alias resolution) trong market-data |
+| 2026-09-06 | M3-T03: Timestamp normalization & Domain Integration | PASS | PASS | 8 unit tests PASS | Struct `MarketTimestamp`, `from_raw_epoch`, tích hợp vào `Trade`/`Quote` và `parser.rs` (119 tests trong workspace) |
+| 2026-09-10 | M3-T04: Invalid data validation & Crossed Market Detection | PASS | PASS | 6 unit tests PASS | Thêm `CrossedMarket`, kiểm tra chéo giá `bid >= ask`, zero-quote, trần/sàn ở cả Domain và Ingestion (125 tests trong workspace) |
+| 2026-09-17 | M3-T05: Duplicate detection (Quote dedup & bounded LRU eviction) | PASS | PASS | 6 unit tests PASS | `EventDeduplicator` với HashSet + VecDeque bounded ring buffer (131 tests trong workspace) |
+| 2026-09-21 | Fix QA BUG-001 & BUG-002: Bi-directional WebSocket write stream & Clean Reconnect Lifecycle | PASS | PASS | 147 unit & QA tests PASS (workspace) | `MarketConnectionManager` write channel & retry reset |
+| 2026-09-25 | M3-T06: Out-of-order event handling (EventSequencer, Bounded Watermark & Latency Window) | PASS | PASS | 4 unit tests PASS (61 unit & 9 QA tests trong crate, workspace PASS) | Ingest, flush_ready, flush_all & eviction |
+| 2026-09-25 | M3-T07: Stale data detection (StaleDataDetector, Monotonic Instant, 4-tier SymbolLiveness & bulk scan) | PASS | PASS | 6 unit tests PASS (67 unit & 9 QA tests trong crate, workspace PASS) | Hoàn thành toàn bộ Milestone M3 |
+| 2026-09-27 | M4-T01: Latest market state (SymbolState, MarketStateStore DashMap & Sharded Concurrency) | PASS | PASS | 5 unit tests PASS (workspace PASS) | Hoàn thành M4-T01 |
+| 2026-09-28 | M4-T02 (Part 1): Candle, Timeframe & SymbolOhlcv bounded rolling window | PASS | PASS | 12 unit tests PASS (227 tests trong workspace) | Đang tiếp tục triển khai OhlcvStateStore đa luồng |
+| 2026-09-30 | M4-T02 (Part 2): OhlcvStateStore multi-timeframe state store & Concurrency | PASS | PASS | 14 unit tests PASS (state-store), 231 tests PASS (workspace) | Hoàn thành toàn bộ M4-T02 |
 
 ## 8. ARCHITECTURE CHANGES
 | Date | Change | Previous | New | Reason | Impact |

@@ -170,7 +170,9 @@ impl MarketStateStore {
     /// - `None`: Nếu mã chứng khoán chưa từng phát sinh dữ liệu trong phiên.
     pub fn get_state(&self, symbol: &str) -> Option<SymbolState> {
         let symbol_normalized = symbol.trim().to_uppercase();
-        self.states.get(&symbol_normalized).map(|entry| entry.value().clone())
+        self.states
+            .get(&symbol_normalized)
+            .map(|entry| entry.value().clone())
     }
 
     /// Lấy nhanh mức giá khớp lệnh gần nhất của một mã chứng khoán.
@@ -179,7 +181,8 @@ impl MarketStateStore {
     /// - `Some(f64)`: Mức giá khớp mới nhất.
     /// - `None`: Nếu chưa có dữ liệu của mã hoặc mã chưa phát sinh lệnh khớp nào.
     pub fn get_last_price(&self, symbol: &str) -> Option<f64> {
-        self.get_state(symbol).and_then(|state| state.last_trade.map(|trade| trade.price))
+        self.get_state(symbol)
+            .and_then(|state| state.last_trade.map(|trade| trade.price))
     }
 
     /// Chụp ảnh (snapshot) toàn bộ trạng thái thị trường của tất cả các mã đang theo dõi.
@@ -187,7 +190,10 @@ impl MarketStateStore {
     /// Thường được gọi bởi các tác vụ định kỳ (Periodic Scheduler), Bot Telegram hiển thị bảng giá,
     /// hoặc các thuật toán quét tín hiệu toàn bộ rổ VN30.
     pub fn snapshot_all(&self) -> Vec<SymbolState> {
-        self.states.iter().map(|entry| entry.value().clone()).collect()
+        self.states
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     /// Trả về tổng số mã chứng khoán đang được theo dõi và lưu trữ trong bộ nhớ.
@@ -238,7 +244,15 @@ mod tests {
         assert_eq!(state.updated_at, make_ts(2));
 
         // 3. Cập nhật Quote
-        let quote1 = Quote::new("HPG".to_string(), 28050.0, 1000.0, 28100.0, 2000.0, make_ts(3)).unwrap();
+        let quote1 = Quote::new(
+            "HPG".to_string(),
+            28050.0,
+            1000.0,
+            28100.0,
+            2000.0,
+            make_ts(3),
+        )
+        .unwrap();
         assert!(state.update_quote(quote1.clone()).is_ok());
         assert_eq!(state.last_quote, Some(quote1));
         assert_eq!(state.updated_at, make_ts(3));
@@ -260,10 +274,26 @@ mod tests {
         assert_eq!(state.last_trade, Some(trade_new));
 
         // Tương tự với Quote
-        let quote_new = Quote::new("VNM".to_string(), 64900.0, 100.0, 65000.0, 200.0, make_ts(25)).unwrap();
+        let quote_new = Quote::new(
+            "VNM".to_string(),
+            64900.0,
+            100.0,
+            65000.0,
+            200.0,
+            make_ts(25),
+        )
+        .unwrap();
         assert!(state.update_quote(quote_new.clone()).is_ok());
 
-        let quote_stale = Quote::new("VNM".to_string(), 64800.0, 100.0, 65000.0, 200.0, make_ts(22)).unwrap();
+        let quote_stale = Quote::new(
+            "VNM".to_string(),
+            64800.0,
+            100.0,
+            65000.0,
+            200.0,
+            make_ts(22),
+        )
+        .unwrap();
         let res_q = state.update_quote(quote_stale);
         assert!(matches!(res_q, Err(PriceDataError::StaleData(_))));
         assert_eq!(state.last_quote, Some(quote_new));
@@ -293,7 +323,15 @@ mod tests {
         assert_eq!(state.last_quote, None);
 
         // Gửi Quote cho FPT
-        let quote = Quote::new("FPT".to_string(), 124500.0, 500.0, 125000.0, 800.0, make_ts(2)).unwrap();
+        let quote = Quote::new(
+            "FPT".to_string(),
+            124500.0,
+            500.0,
+            125000.0,
+            800.0,
+            make_ts(2),
+        )
+        .unwrap();
         store.update_event(&MarketEvent::Quote(quote.clone()));
 
         let state_after_quote = store.get_state("FPT").unwrap();
@@ -307,7 +345,13 @@ mod tests {
         let symbols = ["VIC", "VHM", "VRE"];
 
         for (idx, sym) in symbols.iter().enumerate() {
-            let trade = Trade::new(sym.to_string(), 45000.0 + (idx as f64) * 1000.0, 100.0, make_ts(idx as i64)).unwrap();
+            let trade = Trade::new(
+                sym.to_string(),
+                45000.0 + (idx as f64) * 1000.0,
+                100.0,
+                make_ts(idx as i64),
+            )
+            .unwrap();
             store.update_event(&MarketEvent::Trade(trade));
         }
 
@@ -330,7 +374,8 @@ mod tests {
             let handle = thread::spawn(move || {
                 let symbol = format!("SYM_{}", thread_id);
                 for i in 1..=50 {
-                    let trade = Trade::new(symbol.clone(), 10000.0 + (i as f64), 10.0, make_ts(i)).unwrap();
+                    let trade =
+                        Trade::new(symbol.clone(), 10000.0 + (i as f64), 10.0, make_ts(i)).unwrap();
                     store_clone.update_event(&MarketEvent::Trade(trade));
                 }
             });
@@ -362,4 +407,3 @@ mod tests {
         }
     }
 }
-

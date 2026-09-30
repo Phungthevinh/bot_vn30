@@ -132,7 +132,10 @@ fn test_qa_instrument_parse_canonical_with_exchange_prefix() {
     );
 
     let future_with_prefix = Instrument::parse_canonical("HNX:VN30F2409");
-    println!("parse_canonical('HNX:VN30F2409') = {:?}", future_with_prefix);
+    println!(
+        "parse_canonical('HNX:VN30F2409') = {:?}",
+        future_with_prefix
+    );
     assert!(
         future_with_prefix.is_err(),
         "CONFIRMED BUG: parse_canonical fails on 'HNX:VN30F2409' because it doesn't strip exchange for Future"
@@ -151,7 +154,10 @@ fn test_qa_risk_config_beta_min_unvalidated_when_beta_max_is_none() {
         beta_max: None,
     };
     let val_res = invalid_risk_level.validate();
-    println!("RiskLevelConfig with beta_min = -999.0 and beta_max = None: {:?}", val_res);
+    println!(
+        "RiskLevelConfig with beta_min = -999.0 and beta_max = None: {:?}",
+        val_res
+    );
     assert!(
         val_res.is_ok(),
         "CONFIRMED BUG: RiskLevelConfig allows negative beta_min when beta_max is None!"
@@ -166,7 +172,10 @@ fn test_qa_risk_config_beta_min_unvalidated_when_beta_max_is_none() {
         beta_max: None,
     };
     let nan_res = nan_risk_level.validate();
-    println!("RiskLevelConfig with beta_min = NaN and beta_max = None: {:?}", nan_res);
+    println!(
+        "RiskLevelConfig with beta_min = NaN and beta_max = None: {:?}",
+        nan_res
+    );
     assert!(
         nan_res.is_ok(),
         "CONFIRMED BUG: RiskLevelConfig allows NaN beta_min when beta_max is None!"

@@ -175,31 +175,18 @@ mod tests {
 
         let now = Instant::now();
         // HPG đã được chuẩn hóa viết hoa và cắt khoảng trắng
-        assert_eq!(
-            detector.check_status("HPG", now),
-            SymbolLiveness::NeverSeen
-        );
-        assert_eq!(
-            detector.check_status("hpg", now),
-            SymbolLiveness::NeverSeen
-        );
-        assert_eq!(
-            detector.check_status("VIC", now),
-            SymbolLiveness::NeverSeen
-        );
+        assert_eq!(detector.check_status("HPG", now), SymbolLiveness::NeverSeen);
+        assert_eq!(detector.check_status("hpg", now), SymbolLiveness::NeverSeen);
+        assert_eq!(detector.check_status("VIC", now), SymbolLiveness::NeverSeen);
         // Mã rỗng đã bị lọc bỏ
         assert_eq!(detector.check_status("", now), SymbolLiveness::Untracked);
     }
 
     #[test]
     fn test_untracked_symbol() {
-        let detector =
-            StaleDataDetector::new(Duration::from_secs(10), vec!["HPG".to_string()]);
+        let detector = StaleDataDetector::new(Duration::from_secs(10), vec!["HPG".to_string()]);
         let now = Instant::now();
-        assert_eq!(
-            detector.check_status("VNM", now),
-            SymbolLiveness::Untracked
-        );
+        assert_eq!(detector.check_status("VNM", now), SymbolLiveness::Untracked);
     }
 
     #[test]
@@ -217,10 +204,7 @@ mod tests {
         let t1 = t0 + Duration::from_secs(5);
         assert_eq!(detector.check_status("HPG", t1), SymbolLiveness::Active);
         // VIC chưa nhận tin -> NeverSeen
-        assert_eq!(
-            detector.check_status("VIC", t1),
-            SymbolLiveness::NeverSeen
-        );
+        assert_eq!(detector.check_status("VIC", t1), SymbolLiveness::NeverSeen);
 
         // Tại t0 + 10s (chạm ngưỡng) -> HPG chuyển sang Stale
         let t2 = t0 + Duration::from_secs(10);
@@ -233,8 +217,7 @@ mod tests {
 
     #[test]
     fn test_recovery_from_stale() {
-        let mut detector =
-            StaleDataDetector::new(Duration::from_secs(10), vec!["HPG".to_string()]);
+        let mut detector = StaleDataDetector::new(Duration::from_secs(10), vec!["HPG".to_string()]);
 
         let t0 = Instant::now();
         detector.record_update("HPG", t0);
@@ -281,8 +264,7 @@ mod tests {
         assert_eq!(detector.check_status("VIC", now), SymbolLiveness::Active);
 
         // 3. Sự kiện với mã không theo dõi -> trả về false
-        let untracked_trade =
-            Trade::new("XYZ".to_string(), 10000.0, 50.0, dummy_ts()).unwrap();
+        let untracked_trade = Trade::new("XYZ".to_string(), 10000.0, 50.0, dummy_ts()).unwrap();
         assert!(!detector.record_event(&MarketEvent::Trade(untracked_trade), now));
     }
 
@@ -315,4 +297,3 @@ mod tests {
         assert_eq!(stale_t2.len(), 3);
     }
 }
-
